@@ -6,6 +6,7 @@ import {
     compileSvg,
     createPdfPreviewUrl,
     downloadPdf,
+    extractTypstError,
     revokePdfPreviewUrl,
 } from '@/lib/typst';
 import { defaultTypstSource } from '@/lib/typst-demo-source';
@@ -59,10 +60,7 @@ export function useTypst(): UseTypstReturn {
             previewHtml.value = await compileSvg(source.value);
         } catch (exception) {
             previewHtml.value = null;
-            error.value =
-                exception instanceof Error
-                    ? exception.message
-                    : 'Failed to compile Typst preview.';
+            error.value = extractTypstError(exception);
         } finally {
             isCompiling.value = false;
         }
@@ -81,10 +79,7 @@ export function useTypst(): UseTypstReturn {
             pdfPreviewUrl.value = createPdfPreviewUrl(pdfData);
             pdfPreviewOpen.value = true;
         } catch (exception) {
-            error.value =
-                exception instanceof Error
-                    ? exception.message
-                    : 'Failed to compile PDF preview.';
+            error.value = extractTypstError(exception);
         } finally {
             isPreviewingPdf.value = false;
         }
@@ -95,7 +90,7 @@ export function useTypst(): UseTypstReturn {
             return;
         }
 
-        downloadPdf(pendingPdfData.value, 'typst-test.pdf');
+        downloadPdf(pendingPdfData.value, 'ridge-submission.pdf');
         handlePdfPreviewOpenChange(false);
     };
 

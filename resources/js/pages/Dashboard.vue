@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { defineAsyncComponent } from 'vue';
 import PendingInvitationsModal from '@/components/PendingInvitationsModal.vue';
 import PlaceholderPattern from '@/components/PlaceholderPattern.vue';
 import { dashboard } from '@/routes';
 import type { DashboardInvitation, Team } from '@/types';
-
-const TypstPdfTest = defineAsyncComponent(
-    () => import('@/components/TypstPdfTest.vue'),
-);
 
 defineProps<{
     pendingInvitations?: DashboardInvitation[];
@@ -59,7 +54,7 @@ defineOptions({
         <div
             class="relative min-h-[100vh] flex-1 rounded-xl border border-sidebar-border/70 md:min-h-min dark:border-sidebar-border"
         >
-            <TypstPdfTest />
+            <PlaceholderPattern />
         </div>
     </div>
 </template>

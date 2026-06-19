@@ -43,9 +43,9 @@ onMounted(() => {
     <div class="contents">
         <Card class="h-full gap-4 py-4">
             <CardHeader class="px-4 pb-0">
-                <CardTitle>Typst WASM Test</CardTitle>
+                <CardTitle>Ridge Submission Template</CardTitle>
             <CardDescription>
-                CeTZ charts, equations, and PDF preview — compiled in your browser.
+                Typst recreation of the Ridge submission PDF — preview and download.
             </CardDescription>
             </CardHeader>
 

@@ -1,6 +1,10 @@
 import rendererWasm from '@myriaddreamin/typst-ts-renderer/pkg/typst_ts_renderer_bg.wasm?url';
 import compilerWasm from '@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm?url';
+import { CompileFormatEnum } from '@myriaddreamin/typst.ts/dist/esm/compiler.mjs';
 import { $typst, TypstSnippet } from '@myriaddreamin/typst.ts/dist/esm/contrib/snippet.mjs';
+import { mountRidgeTemplateAssets } from '@/lib/typst-ridge-assets';
+
+const ridgeMainTypPath = '/ridge/main.typ';
 
 let initialized = false;
 
@@ -22,22 +26,91 @@ function ensureInitialized(): void {
     initialized = true;
 }
 
-export async function compileSvg(mainContent: string): Promise<string> {
-    ensureInitialized();
+function formatTypstDiagnostics(
+    diagnostics: Array<string | { message: string }> | undefined,
+): string {
+    if (!diagnostics?.length) {
+        return 'Typst compilation failed.';
+    }
 
-    return $typst.svg({ mainContent });
+    return diagnostics
+        .map((diagnostic) =>
+            typeof diagnostic === 'string' ? diagnostic : diagnostic.message,
+        )
+        .join('\n');
+}
+
+export function extractTypstError(exception: unknown): string {
+    if (exception instanceof Error) {
+        return exception.message;
+    }
+
+    if (typeof exception === 'string') {
+        return exception;
+    }
+
+    if (exception !== null && typeof exception === 'object') {
+        if ('message' in exception && typeof exception.message === 'string') {
+            return exception.message;
+        }
+
+        try {
+            return JSON.stringify(exception);
+        } catch {
+            return 'Typst compilation failed.';
+        }
+    }
+
+    return 'Typst compilation failed.';
+}
+
+async function compileDocument(
+    mainContent: string,
+    format: CompileFormatEnum,
+): Promise<Uint8Array> {
+    ensureInitialized();
+    await mountRidgeTemplateAssets();
+    await $typst.addSource(ridgeMainTypPath, mainContent);
+
+    const compiler = await $typst.getCompiler();
+    const result = await compiler.compile({
+        mainFilePath: ridgeMainTypPath,
+        format,
+        diagnostics: 'unix',
+    });
+
+    if (!result.result) {
+        throw new Error(formatTypstDiagnostics(result.diagnostics));
+    }
+
+    return result.result;
+}
+
+export async function compileSvg(mainContent: string): Promise<string> {
+    const vectorData = await compileDocument(
+        mainContent,
+        CompileFormatEnum.vector,
+    );
+
+    const renderer = await $typst.getRenderer();
+
+    if (!renderer) {
+        throw new Error('Typst renderer is not available.');
+    }
+
+    return renderer.runWithSession(async (session) => {
+        renderer.manipulateData({
+            renderSession: session,
+            action: 'reset',
+            data: vectorData,
+        });
+
+        return renderer.renderSvg({ renderSession: session });
+    });
 }
 
 export async function compilePdf(mainContent: string): Promise<Uint8Array> {
-    ensureInitialized();
-
-    const pdfData = await $typst.pdf({ mainContent });
-
-    if (!pdfData) {
-        throw new Error('Failed to compile PDF.');
-    }
-
-    return pdfData;
+    return compileDocument(mainContent, CompileFormatEnum.pdf);
 }
 
 function createPdfBlob(data: Uint8Array): Blob {
