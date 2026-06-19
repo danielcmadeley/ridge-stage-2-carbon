@@ -1,0 +1,64 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - master
+      - workos
+  pull_request:
+    branches:
+      - develop
+      - main
+      - master
+      - workos
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.3', '8.4', '8.5']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          tools: composer:v2
+          coverage: xdebug
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667f3c6afc24f2c786eb85212a492c8d2 # v2
+        with:
+          bun-version: '1.2.22'
+
+      - name: Install Node Dependencies
+        run: bun install
+
+      - name: Install Dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Copy Environment File
+        run: cp .env.example .env
+
+      - name: Generate Application Key
+        run: php artisan key:generate
+
+      - name: Build Assets
+        run: bun run build
+
+      - name: Run Type Analysis
+        run: composer types:check
+
+      - name: Tests
+        run: php artisan test

@@ -1,0 +1,15 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+        "laravel-boost": {
+            "type": "local",
+            "enabled": true,
+            "command": [
+                "wsl.exe",
+                "/home/danielcmadeley/.config/herd-lite/bin/php",
+                "/home/danielcmadeley/ridge/stage-2-portal-frame/v3/artisan",
+                "boost:mcp"
+            ]
+        }
+    }
+}
