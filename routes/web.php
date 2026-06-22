@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AddressGeocodeController;
+use App\Http\Controllers\BuildingIfcExportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PdfController;
 use App\Http\Controllers\SceneController;
@@ -15,6 +17,12 @@ Route::prefix('{current_team}')
         Route::get('dashboard', DashboardController::class)->name('dashboard');
         Route::get('pdf', PdfController::class)->name('pdf');
         Route::get('scene', SceneController::class)->name('scene');
+        Route::post('geocode', AddressGeocodeController::class)
+            ->middleware('throttle:20,1')
+            ->name('geocode');
+        Route::post('export-ifc', BuildingIfcExportController::class)
+            ->middleware('throttle:20,1')
+            ->name('export-ifc');
     });
 
 Route::middleware(['auth'])->group(function () {

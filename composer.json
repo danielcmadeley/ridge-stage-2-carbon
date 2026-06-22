@@ -81,6 +81,11 @@
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
         ],
+        "post-install-cmd": [
+            "bash -lc '[ -x \"$HOME/.local/bin/uv\" ] || (curl -LsSf https://astral.sh/uv/install.sh | sh)'",
+            "bash -lc 'export PATH=\"$HOME/.local/bin:$PATH\"; uv venv --seed --python=python3'",
+            "bash -lc 'export PATH=\"$HOME/.local/bin:$PATH\"; uv pip install -r storage/python/requirements.txt'"
+        ],
         "post-update-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
             "@php artisan boost:update --ansi"

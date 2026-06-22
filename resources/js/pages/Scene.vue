@@ -30,7 +30,7 @@ defineOptions({
     <Head title="3D Scene" />
 
     <div
-        class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4"
+        class="relative h-[calc(100svh-4rem)] min-h-0 overflow-hidden"
     >
         <UkMap3D />
     </div>

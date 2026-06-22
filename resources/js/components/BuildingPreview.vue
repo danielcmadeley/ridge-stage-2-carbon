@@ -9,7 +9,7 @@ defineProps<{
 </script>
 
 <template>
-    <TresCanvas clear-color="#0f172a" class="h-full w-full">
+    <TresCanvas clear-color="#0f172a" render-mode="always" class="h-full w-full">
         <BuildingPreviewContent :draft="draft" />
     </TresCanvas>
 </template>

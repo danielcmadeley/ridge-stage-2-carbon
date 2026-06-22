@@ -1,11 +1,12 @@
 import { AttributionControl, NavigationControl, TerrainControl } from 'maplibre-gl';
 import type { LngLatLike } from 'maplibre-gl';
-import { onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
+import { onUnmounted, ref, shallowRef, watch } from 'vue';
 import type { Ref } from 'vue';
 import {
     createCustomBuildingsLayer,
 } from '@/lib/map-custom-buildings-layer';
 import type { CustomBuildingsLayer } from '@/lib/map-custom-buildings-layer';
+import { setupBuildingDrag } from '@/lib/map-building-drag';
 import { createMap } from '@/lib/maplibre';
 import { constrainMapToUk, UK_MAX_BOUNDS } from '@/lib/uk-map-bounds';
 import {
@@ -25,10 +26,14 @@ export type UseUkMap3dReturn = {
     isLoading: Ref<boolean>;
     error: Ref<string | null>;
     customBuildings: Ref<CustomBuilding[]>;
-    addBuilding: (draft: BuildingDraft) => CustomBuilding;
+    addBuildingAt: (
+        draft: BuildingDraft,
+        origin: [number, number],
+    ) => CustomBuilding;
+    updateBuilding: (id: string, draft: BuildingDraft) => void;
     removeBuilding: (id: string) => void;
     flyToBuilding: (id: string) => void;
-    getCenter: () => [number, number];
+    resize: () => void;
 };
 
 export function useUkMap3d(
@@ -39,22 +44,27 @@ export function useUkMap3d(
     const customBuildings = ref<CustomBuilding[]>([]);
     const mapRef = shallowRef<ReturnType<typeof createMap> | null>(null);
     const customLayerRef = shallowRef<CustomBuildingsLayer | null>(null);
+    let dragCleanup: (() => void) | null = null;
 
     watch(customBuildings, (buildings) => {
         customLayerRef.value?.syncBuildings(buildings);
         mapRef.value?.triggerRepaint();
     }, { deep: true });
 
-    onMounted(() => {
-        if (!containerRef.value) {
-            error.value = 'Map container is not available.';
-            isLoading.value = false;
+    function destroyMap(): void {
+        dragCleanup?.();
+        dragCleanup = null;
+        mapRef.value?.remove();
+        mapRef.value = null;
+        customLayerRef.value = null;
+    }
 
-            return;
-        }
+    function initializeMap(container: HTMLElement): void {
+        isLoading.value = true;
+        error.value = null;
 
         try {
-            const map = createMap(containerRef.value, {
+            const map = createMap(container, {
                 style: OPENFREEMAP_STYLE,
                 center: UK_MAP_DEFAULTS.center,
                 zoom: UK_MAP_DEFAULTS.zoom,
@@ -84,7 +94,9 @@ export function useUkMap3d(
                 addUkMapTerrain(map);
                 addUkBuildingExtrusions(map);
                 map.addLayer(customLayer);
+                dragCleanup = setupBuildingDrag(map, customBuildings);
                 isLoading.value = false;
+                map.resize();
             });
 
             map.on('error', (event) => {
@@ -100,39 +112,47 @@ export function useUkMap3d(
                     : 'Failed to initialize map.';
             isLoading.value = false;
         }
-    });
-
-    onUnmounted(() => {
-        mapRef.value?.remove();
-        mapRef.value = null;
-        customLayerRef.value = null;
-    });
-
-    function getCenter(): [number, number] {
-        const center = mapRef.value?.getCenter();
-
-        if (!center) {
-            return [...UK_MAP_DEFAULTS.center];
-        }
-
-        return [center.lng, center.lat];
     }
 
-    function addBuilding(draft: BuildingDraft): CustomBuilding {
-        const [lng, lat] = getCenter();
+    watch(
+        containerRef,
+        (container) => {
+            if (container) {
+                if (!mapRef.value) {
+                    initializeMap(container);
+                } else {
+                    mapRef.value.resize();
+                }
+
+                return;
+            }
+
+            destroyMap();
+        },
+        { flush: 'post' },
+    );
+
+    onUnmounted(() => {
+        destroyMap();
+    });
+
+    function addBuildingAt(
+        draft: BuildingDraft,
+        origin: [number, number],
+    ): CustomBuilding {
         const map = mapRef.value;
         const building: CustomBuilding = {
             ...draft,
             id: crypto.randomUUID(),
-            origin: [lng, lat],
-            altitude: map ? queryTerrainAltitude(map, [lng, lat]) : 0,
+            origin,
+            altitude: map ? queryTerrainAltitude(map, origin) : 0,
         };
 
         customBuildings.value = [...customBuildings.value, building];
 
         map?.flyTo({
             center: building.origin as LngLatLike,
-            zoom: Math.max(map.getZoom(), 16),
+            zoom: Math.max(map.getZoom(), 17),
             pitch: Math.max(map.getPitch(), 45),
             duration: 1200,
         });
@@ -140,6 +160,19 @@ export function useUkMap3d(
         map?.triggerRepaint();
 
         return building;
+    }
+
+    function updateBuilding(id: string, draft: BuildingDraft): void {
+        customBuildings.value = customBuildings.value.map((building) =>
+            building.id === id
+                ? {
+                      ...building,
+                      dimensions: { ...draft.dimensions },
+                      color: draft.color,
+                      rotation: [...draft.rotation],
+                  }
+                : building,
+        );
     }
 
     function removeBuilding(id: string): void {
@@ -157,19 +190,24 @@ export function useUkMap3d(
 
         mapRef.value.flyTo({
             center: building.origin as LngLatLike,
-            zoom: Math.max(mapRef.value.getZoom(), 16),
+            zoom: Math.max(mapRef.value.getZoom(), 17),
             pitch: Math.max(mapRef.value.getPitch(), 45),
             duration: 1200,
         });
+    }
+
+    function resize(): void {
+        mapRef.value?.resize();
     }
 
     return {
         isLoading,
         error,
         customBuildings,
-        addBuilding,
+        addBuildingAt,
+        updateBuilding,
         removeBuilding,
         flyToBuilding,
-        getCenter,
+        resize,
     };
 }

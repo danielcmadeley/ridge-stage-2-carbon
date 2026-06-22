@@ -8,6 +8,15 @@ import { bunny } from 'laravel-vite-plugin/fonts';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+    test: {
+        environment: 'node',
+        include: ['resources/js/**/*.test.ts'],
+    },
+    resolve: {
+        alias: {
+            '@': '/resources/js',
+        },
+    },
     assetsInclude: ['**/*.wasm'],
     optimizeDeps: {
         exclude: [

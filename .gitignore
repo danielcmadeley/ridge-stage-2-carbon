@@ -28,3 +28,4 @@ pnpm-lock.yaml
 /.nova
 /.vscode
 /.zed
+/.venv

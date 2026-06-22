@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'ifc' => [
+        'python_binary' => env('IFC_PYTHON_BINARY', file_exists(base_path('.venv/bin/python3')) ? base_path('.venv/bin/python3') : 'python3'),
+    ],
+
 ];

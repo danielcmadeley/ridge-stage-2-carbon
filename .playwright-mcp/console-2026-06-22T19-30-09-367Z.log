@@ -1,0 +1,4 @@
+[    4844ms] [WARNING] [.WebGL-0x30ac00178a00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ https://www.hellomonday.com/:0
+[    4859ms] [WARNING] [.WebGL-0x30ac00178a00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ https://www.hellomonday.com/:0
+[    4869ms] [WARNING] [.WebGL-0x30ac00178a00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ https://www.hellomonday.com/:0
+[    4880ms] [WARNING] [.WebGL-0x30ac00178a00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat) @ https://www.hellomonday.com/:0

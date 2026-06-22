@@ -1,41 +1,90 @@
 <script setup lang="ts">
-import { useLoop, useTres } from '@tresjs/core';
+import { extend, useLoop, useTresContext } from '@tresjs/core';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { onUnmounted, shallowRef, watchEffect } from 'vue';
+import { computed, onUnmounted, shallowRef, watch } from 'vue';
 
-const { camera, renderer } = useTres();
-const controls = shallowRef<OrbitControls | null>(null);
+extend({ OrbitControls });
 
-watchEffect((onCleanup) => {
-    if (!camera.value || !renderer) {
+const props = withDefaults(
+    defineProps<{
+        minDistance?: number;
+        maxDistance?: number;
+        target?: [number, number, number];
+        initialPosition?: [number, number, number];
+    }>(),
+    {
+        minDistance: 2,
+        maxDistance: 500,
+        target: () => [0, 0, 0] as [number, number, number],
+    },
+);
+
+const { camera, renderer, controls: tresControls } = useTresContext();
+const controlsRef = shallowRef<OrbitControls | null>(null);
+
+const activeCamera = computed(() => camera.activeCamera.value);
+const domElement = computed(() => renderer.instance.domElement);
+
+watch(
+    () => props.initialPosition,
+    (position) => {
+        if (!activeCamera.value || !position) {
+            return;
+        }
+
+        activeCamera.value.position.set(...position);
+        controlsRef.value?.update();
+    },
+    { immediate: true },
+);
+
+watch(controlsRef, (instance) => {
+    tresControls.value = instance;
+
+    if (!instance) {
         return;
     }
 
-    const instance = new OrbitControls(camera.value, renderer.domElement);
-    instance.enableDamping = true;
-    instance.dampingFactor = 0.05;
-    instance.minDistance = 3;
-    instance.maxDistance = 20;
-    controls.value = instance;
-
-    onCleanup(() => {
-        instance.dispose();
-        controls.value = null;
+    instance.addEventListener('change', () => {
+        renderer.invalidate();
     });
 });
 
-const { onRender } = useLoop();
+watch(
+    () => [props.minDistance, props.maxDistance, props.target] as const,
+    ([minDistance, maxDistance, target]) => {
+        if (!controlsRef.value) {
+            return;
+        }
 
-onRender(() => {
-    controls.value?.update();
+        controlsRef.value.target.set(...target);
+        controlsRef.value.minDistance = minDistance;
+        controlsRef.value.maxDistance = maxDistance;
+    },
+);
+
+const { onBeforeRender } = useLoop();
+
+onBeforeRender(() => {
+    controlsRef.value?.update();
 });
 
 onUnmounted(() => {
-    controls.value?.dispose();
-    controls.value = null;
+    tresControls.value = null;
 });
 </script>
 
 <template>
-    <slot />
+    <TresOrbitControls
+        v-if="activeCamera && domElement"
+        :key="activeCamera.uuid"
+        ref="controlsRef"
+        :args="[activeCamera, domElement]"
+        :target="target"
+        :enable-damping="true"
+        :damping-factor="0.05"
+        :enable-rotate="true"
+        :min-distance="minDistance"
+        :max-distance="maxDistance"
+    />
 </template>

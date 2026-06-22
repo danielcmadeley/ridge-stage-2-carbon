@@ -7,20 +7,39 @@ const props = defineProps<{
     draft: BuildingDraft;
 }>();
 
-const cameraPosition = computed(() => {
-    const size = Math.max(
+const buildingSize = computed(() =>
+    Math.max(
         props.draft.dimensions.width,
         props.draft.dimensions.depth,
         props.draft.dimensions.height,
-    );
+    ),
+);
 
-    return [size * 1.4, size * 1.1, size * 1.6] as [number, number, number];
-});
+const cameraPosition = computed(
+    () =>
+        [
+            buildingSize.value * 1.4,
+            buildingSize.value * 1.1,
+            buildingSize.value * 1.6,
+        ] as [number, number, number],
+);
+
+const orbitLimits = computed(() => ({
+    minDistance: Math.max(buildingSize.value * 0.4, 2),
+    maxDistance: Math.max(buildingSize.value * 12, 40),
+}));
+
+const orbitTarget = [0, 0, 0] as [number, number, number];
 </script>
 
 <template>
-    <TresPerspectiveCamera :position="cameraPosition" :look-at="[0, 0, 0]" />
-    <SceneOrbitControls />
+    <TresPerspectiveCamera />
+    <SceneOrbitControls
+        :initial-position="cameraPosition"
+        :target="orbitTarget"
+        :min-distance="orbitLimits.minDistance"
+        :max-distance="orbitLimits.maxDistance"
+    />
 
     <TresAmbientLight :intensity="0.45" />
     <TresDirectionalLight :position="[8, 12, 6]" :intensity="1.2" />
