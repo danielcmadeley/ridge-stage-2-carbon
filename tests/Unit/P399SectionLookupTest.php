@@ -51,7 +51,51 @@ test('p399 lookup rejects unavailable sections', function () {
     $lookup = new P399SectionLookup(portalFrameDataPath('p399-portal-frame-data.csv'));
 
     $lookup->lookup('Rafter', 8, 12, 15);
-})->throws(InvalidArgumentException::class, 'P399 section unavailable');
+})->throws(InvalidArgumentException::class, 'P399 has no Rafter section');
+
+test('p399 lookup rounds a non-tabulated eaves height up to the next tabulated value', function () {
+    $lookup = new P399SectionLookup(portalFrameDataPath('p399-portal-frame-data.csv'));
+
+    expect($lookup->lookup('Restrained Column', 10, 7, 25))
+        ->toBe($lookup->lookup('Restrained Column', 10, 8, 25));
+});
+
+test('p399 lookup rounds a non-tabulated line load up to the next tabulated value', function () {
+    $lookup = new P399SectionLookup(portalFrameDataPath('p399-portal-frame-data.csv'));
+
+    expect($lookup->lookup('Rafter', 9.75, 6, 20))
+        ->toBe($lookup->lookup('Rafter', 10, 6, 20));
+});
+
+test('p399 lookup clamps a light line load up to the smallest tabulated value', function () {
+    $lookup = new P399SectionLookup(portalFrameDataPath('p399-portal-frame-data.csv'));
+
+    expect($lookup->lookup('Rafter', 2, 6, 20))
+        ->toBe($lookup->lookup('Rafter', 8, 6, 20));
+});
+
+test('p399 lookup rejects eaves heights beyond the tabulated range', function () {
+    $lookup = new P399SectionLookup(portalFrameDataPath('p399-portal-frame-data.csv'));
+
+    $lookup->lookup('Rafter', 10, 13, 20);
+})->throws(InvalidArgumentException::class, 'out of scope');
+
+test('portal frame geometry resolves sections for a non-tabulated eaves height', function () {
+    $design = new PortalFrameDesign(
+        span: 24.0,
+        eavesHeight: 7.0,
+        buildingLength: 40.0,
+        baySpacing: 5.0,
+        deadLoadKnM2: 1.25,
+        liveLoadKnM2: 0.75,
+        columnRestraint: 'restrained',
+    );
+
+    $result = portalFrameServices()->build($design);
+
+    expect($result['rafter']->name)->toBe('UB 356x171x45')
+        ->and($result['column']->name)->toBe('UB 457x191x82');
+});
 
 test('portal frame geometry resolves screenshot example sections', function () {
     $result = portalFrameServices()->build(PortalFrameDesign::defaults());

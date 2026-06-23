@@ -10,8 +10,16 @@ class P399SectionLookup
     /** @var array<int, int> */
     private const TABULATED_SPANS = [15, 20, 25, 30, 35, 40];
 
+    private const SNAP_TOLERANCE = 1e-6;
+
     /** @var array<string, string> */
     private array $entries = [];
+
+    /** @var list<float> */
+    private array $lineLoadsKnM = [];
+
+    /** @var list<float> */
+    private array $eavesHeightsM = [];
 
     public function __construct(?string $csvPath = null)
     {
@@ -37,14 +45,48 @@ class P399SectionLookup
 
     public function lookup(string $memberType, float $lineLoadKnM, float $eavesHeightM, float $spanM): string
     {
+        $minSpan = self::TABULATED_SPANS[0];
+        $maxSpan = self::TABULATED_SPANS[array_key_last(self::TABULATED_SPANS)];
+
+        if ($spanM < $minSpan - self::SNAP_TOLERANCE || $spanM > $maxSpan + self::SNAP_TOLERANCE) {
+            throw new InvalidArgumentException(
+                "P399 covers spans from {$minSpan} m to {$maxSpan} m; {$spanM} m is out of scope.",
+            );
+        }
+
+        $lookupLineLoad = $this->snapUpToTabulated($lineLoadKnM, $this->lineLoadsKnM);
+
+        if ($lookupLineLoad === null) {
+            $maxLineLoad = $this->lineLoadsKnM[array_key_last($this->lineLoadsKnM)];
+
+            throw new InvalidArgumentException(
+                sprintf(
+                    'P399 covers rafter line loads up to %g kN/m; %.2f kN/m is out of scope.',
+                    $maxLineLoad,
+                    $lineLoadKnM,
+                ),
+            );
+        }
+
+        $lookupEavesHeight = $this->snapUpToTabulated($eavesHeightM, $this->eavesHeightsM);
+
+        if ($lookupEavesHeight === null) {
+            $maxEavesHeight = $this->eavesHeightsM[array_key_last($this->eavesHeightsM)];
+
+            throw new InvalidArgumentException(
+                "P399 covers eaves heights up to {$maxEavesHeight} m; {$eavesHeightM} m is out of scope.",
+            );
+        }
+
         $lookupSpan = $this->snapSpan($spanM);
-        $lineLoadKey = $this->normalizeNumericKey($lineLoadKnM);
-        $eavesKey = $this->normalizeNumericKey($eavesHeightM);
-        $entryKey = strtolower($memberType).'|'.$lineLoadKey.'|'.$eavesKey.'|'.$lookupSpan;
+        $entryKey = strtolower($memberType).'|'
+            .$this->normalizeNumericKey($lookupLineLoad).'|'
+            .$this->normalizeNumericKey($lookupEavesHeight).'|'
+            .$lookupSpan;
 
         if (! array_key_exists($entryKey, $this->entries)) {
             throw new InvalidArgumentException(
-                "No P399 section found for {$memberType} at {$lineLoadKnM} kN/m, {$eavesHeightM} m eaves, {$lookupSpan} m span.",
+                "P399 has no {$memberType} section for {$lookupLineLoad} kN/m, {$lookupEavesHeight} m eaves, {$lookupSpan} m span.",
             );
         }
 
@@ -52,11 +94,25 @@ class P399SectionLookup
 
         if ($designation === '*' || trim($designation) === '') {
             throw new InvalidArgumentException(
-                "P399 section unavailable for {$memberType} at {$lineLoadKnM} kN/m, {$eavesHeightM} m eaves, {$lookupSpan} m span.",
+                "P399 has no {$memberType} section for {$lookupLineLoad} kN/m, {$lookupEavesHeight} m eaves, {$lookupSpan} m span.",
             );
         }
 
         return $designation;
+    }
+
+    /**
+     * @param  list<float>  $tabulated
+     */
+    private function snapUpToTabulated(float $value, array $tabulated): ?float
+    {
+        foreach ($tabulated as $candidate) {
+            if ($candidate >= $value - self::SNAP_TOLERANCE) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     private function load(string $csvPath): void
@@ -75,6 +131,8 @@ class P399SectionLookup
         fgetcsv($handle, escape: '\\');
 
         $currentMemberType = null;
+        $lineLoadSet = [];
+        $eavesHeightSet = [];
 
         while (($row = fgetcsv($handle, escape: '\\')) !== false) {
             if ($row === [null] || $row === false) {
@@ -98,6 +156,11 @@ class P399SectionLookup
                 continue;
             }
 
+            $lineLoadValue = (float) $lineLoad;
+            $eavesHeightValue = (float) $eavesHeight;
+            $lineLoadSet[(string) $lineLoadValue] = $lineLoadValue;
+            $eavesHeightSet[(string) $eavesHeightValue] = $eavesHeightValue;
+
             foreach (self::TABULATED_SPANS as $index => $tabulatedSpan) {
                 $designation = trim((string) ($row[$index + 3] ?? ''));
                 $entryKey = strtolower($currentMemberType).'|'.$lineLoad.'|'.$eavesHeight.'|'.$tabulatedSpan;
@@ -106,6 +169,11 @@ class P399SectionLookup
         }
 
         fclose($handle);
+
+        $this->lineLoadsKnM = array_values($lineLoadSet);
+        sort($this->lineLoadsKnM, SORT_NUMERIC);
+        $this->eavesHeightsM = array_values($eavesHeightSet);
+        sort($this->eavesHeightsM, SORT_NUMERIC);
     }
 
     private function normalizeNumericKey(float $value): string
