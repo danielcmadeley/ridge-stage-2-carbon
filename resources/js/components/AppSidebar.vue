@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import { BookOpen, Box, FileText, FolderGit2, LayoutGrid } from '@lucide/vue';
+import { BookOpen, Box, FolderGit2 } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
@@ -16,34 +16,16 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, pdf, scene } from '@/routes';
+import { scene } from '@/routes';
 import type { NavItem } from '@/types';
 
 const page = usePage();
-
-const dashboardUrl = computed(() =>
-    page.props.currentTeam ? dashboard(page.props.currentTeam.slug).url : '/',
-);
-
-const pdfUrl = computed(() =>
-    page.props.currentTeam ? pdf(page.props.currentTeam.slug).url : '/',
-);
 
 const sceneUrl = computed(() =>
     page.props.currentTeam ? scene(page.props.currentTeam.slug).url : '/',
 );
 
 const mainNavItems = computed<NavItem[]>(() => [
-    {
-        title: 'Dashboard',
-        href: dashboardUrl.value,
-        icon: LayoutGrid,
-    },
-    {
-        title: 'PDF',
-        href: pdfUrl.value,
-        icon: FileText,
-    },
     {
         title: '3D Scene',
         href: sceneUrl.value,
@@ -71,7 +53,7 @@ const footerNavItems: NavItem[] = [
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton size="lg" as-child>
-                        <Link :href="dashboardUrl">
+                        <Link :href="sceneUrl">
                             <AppLogo />
                         </Link>
                     </SidebarMenuButton>

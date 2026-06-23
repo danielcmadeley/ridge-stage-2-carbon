@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import { BookOpen, Box, FileText, Folder, LayoutGrid, Menu, Search } from '@lucide/vue';
+import { BookOpen, Box, Folder, Menu, Search } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
@@ -36,7 +36,7 @@ import UserMenuContent from '@/components/UserMenuContent.vue';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { getInitials } from '@/composables/useInitials';
 import { toUrl } from '@/lib/utils';
-import { dashboard, pdf, scene } from '@/routes';
+import { scene } from '@/routes';
 import type { BreadcrumbItem, NavItem } from '@/types';
 
 type Props = {
@@ -51,14 +51,6 @@ const page = usePage();
 const auth = computed(() => page.props.auth);
 const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
 
-const dashboardUrl = computed(() =>
-    page.props.currentTeam ? dashboard(page.props.currentTeam.slug).url : '/',
-);
-
-const pdfUrl = computed(() =>
-    page.props.currentTeam ? pdf(page.props.currentTeam.slug).url : '/',
-);
-
 const sceneUrl = computed(() =>
     page.props.currentTeam ? scene(page.props.currentTeam.slug).url : '/',
 );
@@ -67,16 +59,6 @@ const activeItemStyles =
     'text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100';
 
 const mainNavItems = computed<NavItem[]>(() => [
-    {
-        title: 'Dashboard',
-        href: dashboardUrl.value,
-        icon: LayoutGrid,
-    },
-    {
-        title: 'PDF',
-        href: pdfUrl.value,
-        icon: FileText,
-    },
     {
         title: '3D Scene',
         href: sceneUrl.value,
@@ -169,7 +151,7 @@ const rightNavItems: NavItem[] = [
                     </Sheet>
                 </div>
 
-                <Link :href="dashboardUrl" class="flex items-center gap-x-2">
+                <Link :href="sceneUrl" class="flex items-center gap-x-2">
                     <AppLogo />
                 </Link>
 

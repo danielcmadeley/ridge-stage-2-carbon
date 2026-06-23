@@ -2,8 +2,6 @@
 
 use App\Http\Controllers\AddressGeocodeController;
 use App\Http\Controllers\BuildingIfcExportController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\PdfController;
 use App\Http\Controllers\SceneController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Middleware\EnsureTeamMembership;
@@ -14,8 +12,6 @@ Route::inertia('/', 'Welcome')->name('home');
 Route::prefix('{current_team}')
     ->middleware(['auth', 'verified', EnsureTeamMembership::class])
     ->group(function () {
-        Route::get('dashboard', DashboardController::class)->name('dashboard');
-        Route::get('pdf', PdfController::class)->name('pdf');
         Route::get('scene', SceneController::class)->name('scene');
         Route::post('geocode', AddressGeocodeController::class)
             ->middleware('throttle:20,1')

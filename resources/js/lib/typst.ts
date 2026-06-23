@@ -2,9 +2,8 @@ import rendererWasm from '@myriaddreamin/typst-ts-renderer/pkg/typst_ts_renderer
 import compilerWasm from '@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm?url';
 import { CompileFormatEnum } from '@myriaddreamin/typst.ts/dist/esm/compiler.mjs';
 import { $typst, TypstSnippet } from '@myriaddreamin/typst.ts/dist/esm/contrib/snippet.mjs';
-import { mountRidgeTemplateAssets } from '@/lib/typst-ridge-assets';
 
-const ridgeMainTypPath = '/ridge/main.typ';
+const mainTypPath = '/ridge/main.typ';
 
 let initialized = false;
 
@@ -69,12 +68,11 @@ async function compileDocument(
     format: CompileFormatEnum,
 ): Promise<Uint8Array> {
     ensureInitialized();
-    await mountRidgeTemplateAssets();
-    await $typst.addSource(ridgeMainTypPath, mainContent);
+    await $typst.addSource(mainTypPath, mainContent);
 
     const compiler = await $typst.getCompiler();
     const result = await compiler.compile({
-        mainFilePath: ridgeMainTypPath,
+        mainFilePath: mainTypPath,
         format,
         diagnostics: 'unix',
     });
@@ -84,29 +82,6 @@ async function compileDocument(
     }
 
     return result.result;
-}
-
-export async function compileSvg(mainContent: string): Promise<string> {
-    const vectorData = await compileDocument(
-        mainContent,
-        CompileFormatEnum.vector,
-    );
-
-    const renderer = await $typst.getRenderer();
-
-    if (!renderer) {
-        throw new Error('Typst renderer is not available.');
-    }
-
-    return renderer.runWithSession(async (session) => {
-        renderer.manipulateData({
-            renderSession: session,
-            action: 'reset',
-            data: vectorData,
-        });
-
-        return renderer.renderSvg({ renderSession: session });
-    });
 }
 
 export async function compilePdf(mainContent: string): Promise<Uint8Array> {
