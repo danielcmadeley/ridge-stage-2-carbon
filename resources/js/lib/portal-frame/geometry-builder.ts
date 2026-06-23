@@ -61,7 +61,10 @@ function buildMembers(
     columnSection: UbSectionDimensions,
 ): FrameMember[] {
     const members: FrameMember[] = [];
-    const frameCount = Math.max(1, Math.round(design.buildingLength / design.baySpacing));
+    // A building length spanning N bays has N + 1 frames (one at each bay
+    // boundary), e.g. 10 m at 5 m spacing -> 2 bays -> 3 frames at y = 0, 5, 10.
+    const bayCount = Math.max(1, Math.round(design.buildingLength / design.baySpacing));
+    const frameCount = bayCount + 1;
     const halfSpan = design.span / 2;
     const pitchRadians = (design.roofPitchDeg * Math.PI) / 180;
     const apexHeight = design.eavesHeight + halfSpan * Math.tan(pitchRadians);

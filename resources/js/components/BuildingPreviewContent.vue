@@ -2,6 +2,8 @@
 import { Group } from 'three';
 import { computed, onUnmounted, shallowRef, watch } from 'vue';
 import SceneOrbitControls from '@/components/SceneOrbitControls.vue';
+import { useForceDiagramHover } from '@/composables/useForceDiagramHover';
+import type { ForceDiagramHoverInfo } from '@/lib/portal-frame/force-diagram-hover';
 import {
     disposeObject3D,
     portalFramePreviewMetrics,
@@ -16,6 +18,10 @@ const props = defineProps<{
     analyticalForceMode?: AnalyticalForceMode;
 }>();
 
+const emit = defineEmits<{
+    forceHover: [ForceDiagramHoverInfo | null];
+}>();
+
 const frameGroup = shallowRef<Group>(new Group());
 const cameraUp = [0, 0, 1] as [number, number, number];
 
@@ -27,18 +33,44 @@ watch(
             props.analyticalForceMode,
         ] as const,
     ([design, analyticalView, forceMode]) => {
-        frameGroup.value = replacePortalFrameThreeGroup(
-            frameGroup.value,
-            design,
-            analyticalView ? 'analytical' : 'solid',
-            forceMode ?? 'moment',
-        );
+        try {
+            frameGroup.value = replacePortalFrameThreeGroup(
+                frameGroup.value,
+                design,
+                analyticalView ? 'analytical' : 'solid',
+                forceMode ?? 'moment',
+            );
+        } catch {
+            // Out-of-scope or unresolved design: clear the preview. The editor
+            // panel surfaces the specific reason via the frame error message.
+            disposeObject3D(frameGroup.value);
+            frameGroup.value = new Group();
+        }
     },
     { immediate: true, deep: true },
 );
 
 const metrics = computed(() =>
     portalFramePreviewMetrics(props.draft.portalFrame),
+);
+
+const analyticalViewEnabled = computed(() => props.analyticalView === true);
+const lineThresholdM = computed(() =>
+    Math.max(metrics.value.size * 0.015, 0.15),
+);
+
+const { hoverInfo } = useForceDiagramHover({
+    enabled: analyticalViewEnabled,
+    frameGroup,
+    lineThresholdM,
+});
+
+watch(
+    hoverInfo,
+    (info) => {
+        emit('forceHover', info ?? null);
+    },
+    { immediate: true },
 );
 
 const cameraPosition = computed(

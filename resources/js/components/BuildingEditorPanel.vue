@@ -20,7 +20,8 @@ import {
     geocodeAddress,
     type GeocodedAddress,
 } from '@/lib/geocode-address';
-import { buildPortalFrame } from '@/lib/portal-frame';
+import { analyzePortalFrame, buildPortalFrame } from '@/lib/portal-frame';
+import type { AnalyticalForceMode } from '@/lib/portal-frame/three-group';
 import {
     defaultBuildingDraft,
     portalFrameBounds,
@@ -44,7 +45,19 @@ const isExporting = ref(false);
 const exportError = ref<string | null>(null);
 const frameError = ref<string | null>(null);
 const analyticalView = ref(false);
-const analyticalForceMode = ref<'shear' | 'moment'>('moment');
+const analyticalForceMode = ref<AnalyticalForceMode>('moment');
+
+const baseReactions = computed(() => {
+    if (!resolvedFrame.value) {
+        return null;
+    }
+
+    try {
+        return analyzePortalFrame(resolvedFrame.value).reactions;
+    } catch {
+        return null;
+    }
+});
 
 const teamSlug = computed(() => page.props.currentTeam?.slug ?? null);
 const placedBuildings = computed(() => props.map.customBuildings.value);
@@ -351,7 +364,7 @@ function updateColumnRestraint(event: Event): void {
 
                     <div
                         v-if="analyticalView"
-                        class="grid grid-cols-2 gap-2"
+                        class="grid grid-cols-3 gap-2"
                     >
                         <Button
                             type="button"
@@ -377,6 +390,36 @@ function updateColumnRestraint(event: Event): void {
                         >
                             Moment
                         </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            :variant="
+                                analyticalForceMode === 'axial'
+                                    ? 'default'
+                                    : 'outline'
+                            "
+                            @click="analyticalForceMode = 'axial'"
+                        >
+                            Axial
+                        </Button>
+                    </div>
+
+                    <div
+                        v-if="analyticalView && baseReactions"
+                        class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-sm"
+                    >
+                        <p class="mb-1 font-medium">Base reactions (pinned)</p>
+                        <div class="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-0.5">
+                            <span class="text-muted-foreground"></span>
+                            <span class="text-muted-foreground">Horizontal</span>
+                            <span class="text-muted-foreground">Vertical</span>
+                            <span class="text-muted-foreground">Left</span>
+                            <span>{{ baseReactions.left.fxKn.toFixed(1) }} kN</span>
+                            <span>{{ baseReactions.left.fzKn.toFixed(1) }} kN</span>
+                            <span class="text-muted-foreground">Right</span>
+                            <span>{{ baseReactions.right.fxKn.toFixed(1) }} kN</span>
+                            <span>{{ baseReactions.right.fzKn.toFixed(1) }} kN</span>
+                        </div>
                     </div>
 
                     <div

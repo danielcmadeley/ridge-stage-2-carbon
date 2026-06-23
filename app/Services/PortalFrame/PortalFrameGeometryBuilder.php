@@ -79,7 +79,10 @@ class PortalFrameGeometryBuilder
         UbSection $columnSection,
     ): array {
         $members = [];
-        $frameCount = max(1, (int) round($design->buildingLength / $design->baySpacing));
+        // A building length spanning N bays has N + 1 frames (one at each bay
+        // boundary), e.g. 10 m at 5 m spacing -> 2 bays -> 3 frames at y = 0, 5, 10.
+        $bayCount = max(1, (int) round($design->buildingLength / $design->baySpacing));
+        $frameCount = $bayCount + 1;
         $halfSpan = $design->span / 2;
         $pitchRadians = deg2rad($design->roofPitchDeg);
         $apexHeight = $design->eavesHeight + ($halfSpan * tan($pitchRadians));

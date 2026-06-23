@@ -47,10 +47,11 @@ test('portal frame geometry resolves screenshot example sections', function () {
 });
 
 test('portal frame geometry creates expected member counts', function () {
+    // Defaults: 40 m building length at 5 m bay spacing -> 8 bays -> 9 frames.
     $members = portalFrameServices()->build(PortalFrameDesign::defaults())['members'];
 
-    expect($members)->toHaveCount(48)
-        ->and(collect($members)->where('role', 'column'))->toHaveCount(16)
-        ->and(collect($members)->where('role', 'rafter'))->toHaveCount(16)
-        ->and(collect($members)->where('role', 'foundation'))->toHaveCount(16);
+    expect($members)->toHaveCount(54)
+        ->and(collect($members)->where('role', 'column'))->toHaveCount(18)
+        ->and(collect($members)->where('role', 'rafter'))->toHaveCount(18)
+        ->and(collect($members)->where('role', 'foundation'))->toHaveCount(18);
 });

@@ -14,6 +14,8 @@ export type MemberAnalysisResult = {
     stationsM: number[];
     shearKn: number[];
     momentKnm: number[];
+    /** Internal axial force (kN), tension positive, compression negative. */
+    axialKn: number[];
 };
 
 export type SupportReaction = {
@@ -169,7 +171,13 @@ function transformationMatrix(directionCosineX: number, directionCosineZ: number
     ];
 }
 
-function fixedEndForceVector(
+/**
+ * Equivalent nodal load vector for a member under uniform local loads.
+ * These point in the same sense as the applied load (downward gravity gives
+ * downward nodal forces). The true fixed-end member forces are the negative
+ * of this vector.
+ */
+function equivalentNodalLoadVector(
     length: number,
     localTransverseLoad: number,
     localAxialLoad: number,
@@ -276,16 +284,16 @@ function assembleLoadVector(
         if (element.role === 'rafter') {
             const localTransverseLoad = -verticalLoadKnM * c;
             const localAxialLoad = -verticalLoadKnM * s;
-            const fixedEndForces = fixedEndForceVector(
+            const equivalentNodalLoad = equivalentNodalLoadVector(
                 geometry.length,
                 localTransverseLoad,
                 localAxialLoad,
             );
             const transform = transformationMatrix(c, s);
             const transformTranspose = transposeMatrix(transform);
-            const globalFixedEndForces = multiplyMatrixVector(
+            const globalEquivalentNodalLoad = multiplyMatrixVector(
                 transformTranspose,
-                fixedEndForces,
+                equivalentNodalLoad,
             );
 
             const dofMap = [
@@ -298,7 +306,7 @@ function assembleLoadVector(
             ];
 
             for (let index = 0; index < 6; index++) {
-                load[dofMap[index]] += globalFixedEndForces[index];
+                load[dofMap[index]] += globalEquivalentNodalLoad[index];
             }
 
             element.localTransverseLoadKnM = localTransverseLoad;
@@ -367,29 +375,38 @@ function sampleMemberForces(
     ];
     const globalDisplacements = dofMap.map((dof) => displacements[dof]);
     const localDisplacements = multiplyMatrixVector(transform, globalDisplacements);
-    const fixedEndForces = fixedEndForceVector(
+    // True fixed-end member forces are the negative of the equivalent nodal load.
+    const fixedEndForces = equivalentNodalLoadVector(
         geometry.length,
         element.localTransverseLoadKnM,
         element.localAxialLoadKnM,
-    );
+    ).map((value) => -value);
     const localEndForces = localStiffness
         .map((row, rowIndex) =>
             row.reduce((sum, value, column) => sum + value * localDisplacements[column], 0) +
             fixedEndForces[rowIndex],
         );
 
+    const axialAtI = localEndForces[0];
     const shearAtI = localEndForces[1];
-    const momentAtI = localEndForces[2];
-    const w = element.localTransverseLoadKnM;
+    // The internal bending moment at the i-end is the negative of the element's
+    // nodal end moment. Integrating shear and distributed load from this baseline
+    // then recovers the moment diagram (e.g. small sagging moment at the apex,
+    // peak hogging at the eaves), rather than diverging at the far end.
+    const momentAtI = -localEndForces[2];
+    const transverseLoad = element.localTransverseLoadKnM;
+    const axialLoad = element.localAxialLoadKnM;
     const stationsM: number[] = [];
     const shearKn: number[] = [];
     const momentKnm: number[] = [];
+    const axialKn: number[] = [];
 
     for (let station = 0; station <= STATION_COUNT; station++) {
         const x = (geometry.length * station) / STATION_COUNT;
         stationsM.push(x);
-        shearKn.push(shearAtI - w * x);
-        momentKnm.push(momentAtI + shearAtI * x - (w * x ** 2) / 2);
+        shearKn.push(shearAtI + transverseLoad * x);
+        momentKnm.push(momentAtI + shearAtI * x + (transverseLoad * x ** 2) / 2);
+        axialKn.push(-(axialAtI + axialLoad * x));
     }
 
     return {
@@ -400,6 +417,7 @@ function sampleMemberForces(
         stationsM,
         shearKn,
         momentKnm,
+        axialKn,
     };
 }
 
