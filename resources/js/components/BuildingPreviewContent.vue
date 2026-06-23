@@ -1,70 +1,86 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { Group } from 'three';
+import { computed, onUnmounted, shallowRef, watch } from 'vue';
 import SceneOrbitControls from '@/components/SceneOrbitControls.vue';
+import {
+    disposeObject3D,
+    portalFramePreviewMetrics,
+    replacePortalFrameThreeGroup,
+    type AnalyticalForceMode,
+} from '@/lib/portal-frame/three-group';
 import type { BuildingDraft } from '@/types/custom-building';
 
 const props = defineProps<{
     draft: BuildingDraft;
+    analyticalView?: boolean;
+    analyticalForceMode?: AnalyticalForceMode;
 }>();
 
-const buildingSize = computed(() =>
-    Math.max(
-        props.draft.dimensions.width,
-        props.draft.dimensions.depth,
-        props.draft.dimensions.height,
-    ),
+const frameGroup = shallowRef<Group>(new Group());
+const cameraUp = [0, 0, 1] as [number, number, number];
+
+watch(
+    () =>
+        [
+            props.draft.portalFrame,
+            props.analyticalView,
+            props.analyticalForceMode,
+        ] as const,
+    ([design, analyticalView, forceMode]) => {
+        frameGroup.value = replacePortalFrameThreeGroup(
+            frameGroup.value,
+            design,
+            analyticalView ? 'analytical' : 'solid',
+            forceMode ?? 'moment',
+        );
+    },
+    { immediate: true, deep: true },
+);
+
+const metrics = computed(() =>
+    portalFramePreviewMetrics(props.draft.portalFrame),
 );
 
 const cameraPosition = computed(
     () =>
         [
-            buildingSize.value * 1.4,
-            buildingSize.value * 1.1,
-            buildingSize.value * 1.6,
+            metrics.value.size * 1.4,
+            metrics.value.size * 1.2,
+            metrics.value.apexHeight * 1.35,
         ] as [number, number, number],
 );
 
 const orbitLimits = computed(() => ({
-    minDistance: Math.max(buildingSize.value * 0.4, 2),
-    maxDistance: Math.max(buildingSize.value * 12, 40),
+    minDistance: Math.max(metrics.value.size * 0.35, 2),
+    maxDistance: Math.max(metrics.value.size * 10, 40),
 }));
 
-const orbitTarget = [0, 0, 0] as [number, number, number];
+const orbitTarget = computed(
+    () => [0, 0, metrics.value.apexHeight / 2] as [number, number, number],
+);
+
+onUnmounted(() => {
+    disposeObject3D(frameGroup.value);
+});
 </script>
 
 <template>
-    <TresPerspectiveCamera />
+    <TresPerspectiveCamera :up="cameraUp" />
     <SceneOrbitControls
         :initial-position="cameraPosition"
         :target="orbitTarget"
         :min-distance="orbitLimits.minDistance"
         :max-distance="orbitLimits.maxDistance"
+        :up="cameraUp"
     />
 
-    <TresAmbientLight :intensity="0.45" />
-    <TresDirectionalLight :position="[8, 12, 6]" :intensity="1.2" />
+    <TresAmbientLight :intensity="0.55" />
+    <TresDirectionalLight :position="[8, 6, 12]" :intensity="1.2" />
 
-    <TresMesh
-        :rotation="[draft.rotation[0], draft.rotation[1], draft.rotation[2]]"
-        :position="[0, draft.dimensions.height / 2, 0]"
-        cast-shadow
-    >
-        <TresBoxGeometry
-            :args="[
-                draft.dimensions.width,
-                draft.dimensions.height,
-                draft.dimensions.depth,
-            ]"
-        />
-        <TresMeshStandardMaterial
-            :color="draft.color"
-            :metalness="0.25"
-            :roughness="0.55"
-        />
-    </TresMesh>
+    <primitive :object="frameGroup" />
 
-    <TresMesh :rotation="[-Math.PI / 2, 0, 0]" :position="[0, 0, 0]">
-        <TresPlaneGeometry :args="[80, 80]" />
-        <TresMeshStandardMaterial color="#1e293b" :roughness="0.9" />
+    <TresMesh :position="[0, 0, 0]">
+        <TresPlaneGeometry :args="[120, 120]" />
+        <TresMeshStandardMaterial color="#f3f4f6" :roughness="0.95" />
     </TresMesh>
 </template>

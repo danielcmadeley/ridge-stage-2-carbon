@@ -11,11 +11,13 @@ const props = withDefaults(
         maxDistance?: number;
         target?: [number, number, number];
         initialPosition?: [number, number, number];
+        up?: [number, number, number];
     }>(),
     {
         minDistance: 2,
         maxDistance: 500,
         target: () => [0, 0, 0] as [number, number, number],
+        up: () => [0, 0, 1] as [number, number, number],
     },
 );
 
@@ -32,6 +34,7 @@ watch(
             return;
         }
 
+        activeCamera.value.up.set(...props.up);
         activeCamera.value.position.set(...position);
         controlsRef.value?.update();
     },
@@ -51,12 +54,13 @@ watch(controlsRef, (instance) => {
 });
 
 watch(
-    () => [props.minDistance, props.maxDistance, props.target] as const,
-    ([minDistance, maxDistance, target]) => {
-        if (!controlsRef.value) {
+    () => [props.minDistance, props.maxDistance, props.target, props.up] as const,
+    ([minDistance, maxDistance, target, up]) => {
+        if (!controlsRef.value || !activeCamera.value) {
             return;
         }
 
+        activeCamera.value.up.set(...up);
         controlsRef.value.target.set(...target);
         controlsRef.value.minDistance = minDistance;
         controlsRef.value.maxDistance = maxDistance;

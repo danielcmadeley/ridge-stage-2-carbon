@@ -2,19 +2,29 @@
 
 namespace App\Services;
 
+use App\Data\PortalFrameDesign;
+use App\Services\PortalFrame\PortalFrameDesignResolver;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
 class ExportBuildingIfc
 {
+    public function __construct(
+        private readonly PortalFrameDesignResolver $portalFrameDesignResolver,
+    ) {}
+
     /**
      * @param  array{
-     *     width: float|int,
-     *     depth: float|int,
-     *     height: float|int,
+     *     span: float|int,
+     *     eavesHeight: float|int,
+     *     buildingLength: float|int,
+     *     baySpacing: float|int,
+     *     deadLoadKnM2: float|int,
+     *     liveLoadKnM2: float|int,
+     *     columnRestraint: 'restrained'|'unrestrained',
+     *     roofPitchDeg?: float|int,
      *     name?: string|null,
-     *     rotation?: array{0: float|int, 1: float|int, 2: float|int},
-     *     origin?: array{0: float|int, 1: float|int}|null
+     *     rotation?: array{0: float|int, 1: float|int, 2: float|int}
      * }  $payload
      */
     public function export(array $payload): string
@@ -28,13 +38,15 @@ class ExportBuildingIfc
         $outputPath = $temporaryPath.'.ifc';
         rename($temporaryPath, $outputPath);
 
+        $design = PortalFrameDesign::fromArray($payload);
+        $resolved = $this->portalFrameDesignResolver->resolveForExport($design);
+
         $process = Process::timeout(30)
             ->input(json_encode([
-                'width' => $payload['width'],
-                'depth' => $payload['depth'],
-                'height' => $payload['height'],
                 'name' => $payload['name'] ?? null,
                 'rotation' => $payload['rotation'] ?? [0, 0, 0],
+                'members' => $resolved['members'],
+                'haunches' => $resolved['haunches'],
             ], JSON_THROW_ON_ERROR))
             ->run([
                 config('services.ifc.python_binary'),

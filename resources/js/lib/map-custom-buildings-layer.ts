@@ -5,25 +5,23 @@ import type {
     Map as MapLibreMap,
 } from 'maplibre-gl';
 import {
-    BoxGeometry,
     Camera,
-    Color,
     DirectionalLight,
+    Group,
     Matrix4,
-    Mesh,
-    MeshStandardMaterial,
     Scene,
     Vector3,
     WebGLRenderer,
 } from 'three';
 import type { Ref } from 'vue';
+import { buildPortalFrameThreeGroup, disposeObject3D } from '@/lib/portal-frame/three-group';
 import { isTerrainEnabled, queryTerrainAltitude } from '@/lib/uk-map-terrain';
 import type { CustomBuilding } from '@/types/custom-building';
 
 const LAYER_ID = 'custom-buildings';
 
 type BuildingMeshEntry = {
-    mesh: Mesh;
+    group: Group;
     building: CustomBuilding;
 };
 
@@ -45,7 +43,6 @@ function buildLocalMatrix(
     const altitude = resolveBuildingAltitude(map, building);
     const mercator = MercatorCoordinate.fromLngLat(building.origin, altitude);
     const meterScale = mercator.meterInMercatorCoordinateUnits();
-    const { width, depth, height } = building.dimensions;
 
     const rotationX = new Matrix4().makeRotationAxis(
         new Vector3(1, 0, 0),
@@ -62,31 +59,29 @@ function buildLocalMatrix(
 
     return new Matrix4()
         .makeTranslation(mercator.x, mercator.y, mercator.z)
-        .scale(new Vector3(width * meterScale, height * meterScale, depth * meterScale))
-        .scale(new Vector3(1, -1, 1))
+        .scale(new Vector3(meterScale, -meterScale, meterScale))
         .multiply(rotationX)
         .multiply(rotationY)
-        .multiply(rotationZ)
-        .multiply(new Matrix4().makeTranslation(0, 0.5, 0));
+        .multiply(rotationZ);
 }
 
-function createBuildingMesh(building: CustomBuilding): Mesh {
-    const geometry = new BoxGeometry(1, 1, 1);
-    const material = new MeshStandardMaterial({
-        color: new Color(building.color ?? '#6366f1'),
-        metalness: 0.2,
-        roughness: 0.65,
-    });
-
-    return new Mesh(geometry, material);
+function createBuildingGroup(building: CustomBuilding): Group {
+    return buildPortalFrameThreeGroup(building.portalFrame);
 }
 
-function buildingChanged(a: CustomBuilding, b: CustomBuilding): boolean {
+function portalFrameChanged(a: CustomBuilding, b: CustomBuilding): boolean {
+    const frameA = a.portalFrame;
+    const frameB = b.portalFrame;
+
     return (
-        a.dimensions.width !== b.dimensions.width ||
-        a.dimensions.depth !== b.dimensions.depth ||
-        a.dimensions.height !== b.dimensions.height ||
-        a.color !== b.color ||
+        frameA.span !== frameB.span ||
+        frameA.eavesHeight !== frameB.eavesHeight ||
+        frameA.buildingLength !== frameB.buildingLength ||
+        frameA.baySpacing !== frameB.baySpacing ||
+        frameA.deadLoadKnM2 !== frameB.deadLoadKnM2 ||
+        frameA.liveLoadKnM2 !== frameB.liveLoadKnM2 ||
+        frameA.columnRestraint !== frameB.columnRestraint ||
+        frameA.roofPitchDeg !== frameB.roofPitchDeg ||
         a.origin[0] !== b.origin[0] ||
         a.origin[1] !== b.origin[1] ||
         a.altitude !== b.altitude ||
@@ -151,9 +146,9 @@ class CustomBuildingsLayerImpl implements CustomBuildingsLayer {
             args.defaultProjectionData.mainMatrix,
         );
 
-        for (const { mesh, building } of this.meshEntries.values()) {
+        for (const { group, building } of this.meshEntries.values()) {
             for (const entry of this.meshEntries.values()) {
-                entry.mesh.visible = entry.mesh === mesh;
+                entry.group.visible = entry.group === group;
             }
 
             this.camera.projectionMatrix = projection
@@ -164,7 +159,7 @@ class CustomBuildingsLayerImpl implements CustomBuildingsLayer {
         }
 
         for (const entry of this.meshEntries.values()) {
-            entry.mesh.visible = true;
+            entry.group.visible = true;
         }
 
         if (isTerrainEnabled(this.map)) {
@@ -181,9 +176,8 @@ class CustomBuildingsLayerImpl implements CustomBuildingsLayer {
 
         for (const [id, entry] of this.meshEntries) {
             if (!nextIds.has(id)) {
-                this.scene.remove(entry.mesh);
-                entry.mesh.geometry.dispose();
-                (entry.mesh.material as MeshStandardMaterial).dispose();
+                this.scene.remove(entry.group);
+                disposeObject3D(entry.group);
                 this.meshEntries.delete(id);
             }
         }
@@ -192,20 +186,19 @@ class CustomBuildingsLayerImpl implements CustomBuildingsLayer {
             const existing = this.meshEntries.get(building.id);
 
             if (!existing) {
-                const mesh = createBuildingMesh(building);
-                this.scene.add(mesh);
-                this.meshEntries.set(building.id, { mesh, building });
+                const group = createBuildingGroup(building);
+                this.scene.add(group);
+                this.meshEntries.set(building.id, { group, building });
                 continue;
             }
 
-            if (buildingChanged(existing.building, building)) {
-                this.scene.remove(existing.mesh);
-                existing.mesh.geometry.dispose();
-                (existing.mesh.material as MeshStandardMaterial).dispose();
+            if (portalFrameChanged(existing.building, building)) {
+                this.scene.remove(existing.group);
+                disposeObject3D(existing.group);
 
-                const mesh = createBuildingMesh(building);
-                this.scene.add(mesh);
-                this.meshEntries.set(building.id, { mesh, building });
+                const group = createBuildingGroup(building);
+                this.scene.add(group);
+                this.meshEntries.set(building.id, { group, building });
                 continue;
             }
 
@@ -214,9 +207,8 @@ class CustomBuildingsLayerImpl implements CustomBuildingsLayer {
     }
 
     onRemove(): void {
-        for (const { mesh } of this.meshEntries.values()) {
-            mesh.geometry.dispose();
-            (mesh.material as MeshStandardMaterial).dispose();
+        for (const { group } of this.meshEntries.values()) {
+            disposeObject3D(group);
         }
 
         this.meshEntries.clear();

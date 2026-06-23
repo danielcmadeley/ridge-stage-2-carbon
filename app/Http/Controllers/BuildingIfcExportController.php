@@ -14,10 +14,9 @@ class BuildingIfcExportController extends Controller
     ): Response {
         $payload = $request->exportPayload();
         $filename = sprintf(
-            'building-%sx%sx%s.ifc',
-            rtrim(rtrim((string) $payload['width'], '0'), '.'),
-            rtrim(rtrim((string) $payload['depth'], '0'), '.'),
-            rtrim(rtrim((string) $payload['height'], '0'), '.'),
+            'portal-frame-%sx%s.ifc',
+            rtrim(rtrim((string) $payload['span'], '0'), '.'),
+            rtrim(rtrim((string) $payload['buildingLength'], '0'), '.'),
         );
 
         return response($exporter->export($payload), 200, [

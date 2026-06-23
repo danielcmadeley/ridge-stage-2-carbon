@@ -12,9 +12,9 @@ function csrfToken(): string {
 }
 
 export function buildingIfcFilename(draft: BuildingDraft): string {
-    const { width, depth, height } = draft.dimensions;
+    const { span, buildingLength } = draft.portalFrame;
 
-    return `building-${width}x${depth}x${height}.ifc`;
+    return `portal-frame-${span}x${buildingLength}.ifc`;
 }
 
 export async function exportBuildingToIfc(
@@ -32,9 +32,7 @@ export async function exportBuildingToIfc(
         },
         credentials: 'same-origin',
         body: JSON.stringify({
-            width: draft.dimensions.width,
-            depth: draft.dimensions.depth,
-            height: draft.dimensions.height,
+            ...draft.portalFrame,
             rotation: draft.rotation,
             name: options.name,
         }),

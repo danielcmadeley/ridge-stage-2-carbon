@@ -12,6 +12,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { UseUkMap3dReturn } from '@/composables/useUkMap3d';
@@ -19,7 +20,13 @@ import {
     geocodeAddress,
     type GeocodedAddress,
 } from '@/lib/geocode-address';
-import { defaultBuildingDraft } from '@/types/custom-building';
+import { buildPortalFrame } from '@/lib/portal-frame';
+import {
+    defaultBuildingDraft,
+    portalFrameBounds,
+} from '@/types/custom-building';
+import type { ColumnRestraint } from '@/types/portal-frame';
+import { rafterLineLoadKnM } from '@/types/portal-frame';
 
 const props = defineProps<{
     map: UseUkMap3dReturn;
@@ -35,6 +42,9 @@ const searchResults = ref<GeocodedAddress[]>([]);
 const mapBuildingId = ref<string | null>(null);
 const isExporting = ref(false);
 const exportError = ref<string | null>(null);
+const frameError = ref<string | null>(null);
+const analyticalView = ref(false);
+const analyticalForceMode = ref<'shear' | 'moment'>('moment');
 
 const teamSlug = computed(() => page.props.currentTeam?.slug ?? null);
 const placedBuildings = computed(() => props.map.customBuildings.value);
@@ -46,6 +56,23 @@ const activePlacedBuilding = computed(() =>
         : null,
 );
 
+const resolvedFrame = computed(() => {
+    try {
+        frameError.value = null;
+
+        return buildPortalFrame(draft.portalFrame);
+    } catch (error) {
+        frameError.value =
+            error instanceof Error
+                ? error.message
+                : 'Could not resolve portal frame sections.';
+
+        return null;
+    }
+});
+
+const bounds = computed(() => portalFrameBounds(draft.portalFrame));
+
 watch(
     draft,
     () => {
@@ -54,8 +81,7 @@ watch(
         }
 
         props.map.updateBuilding(mapBuildingId.value, {
-            dimensions: { ...draft.dimensions },
-            color: draft.color,
+            portalFrame: { ...draft.portalFrame },
             rotation: [...draft.rotation],
         });
     },
@@ -68,8 +94,7 @@ function syncDraftToMap(): void {
     }
 
     props.map.updateBuilding(mapBuildingId.value, {
-        dimensions: { ...draft.dimensions },
-        color: draft.color,
+        portalFrame: { ...draft.portalFrame },
         rotation: [...draft.rotation],
     });
 }
@@ -121,8 +146,7 @@ async function searchAddress(): Promise<void> {
 async function placeBuildingAtAddress(result: GeocodedAddress): Promise<void> {
     const origin: [number, number] = [result.lng, result.lat];
     const buildingDraft = {
-        dimensions: { ...draft.dimensions },
-        color: draft.color,
+        portalFrame: { ...draft.portalFrame },
         rotation: [...draft.rotation] as [number, number, number],
     };
 
@@ -159,16 +183,19 @@ async function exportBuilding(): Promise<void> {
             throw new Error('Select a team before exporting IFC.');
         }
 
+        if (!resolvedFrame.value) {
+            throw new Error(frameError.value ?? 'Could not resolve portal frame sections.');
+        }
+
         await exportAndDownloadBuildingIfc(
             teamSlug.value,
             {
-                dimensions: { ...draft.dimensions },
-                color: draft.color,
+                portalFrame: { ...draft.portalFrame },
                 rotation: [...draft.rotation],
             },
             {
                 name: activePlacedBuilding.value
-                    ? `${activePlacedBuilding.value.dimensions.width}x${activePlacedBuilding.value.dimensions.depth}x${activePlacedBuilding.value.dimensions.height}m building`
+                    ? `${draft.portalFrame.span}m span portal frame`
                     : undefined,
             },
         );
@@ -181,12 +208,22 @@ async function exportBuilding(): Promise<void> {
         isExporting.value = false;
     }
 }
+
+function updateColumnRestraint(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value as ColumnRestraint;
+    draft.portalFrame.columnRestraint = value;
+    syncDraftToMap();
+}
 </script>
 
 <template>
     <div class="relative h-full min-h-0 w-full overflow-hidden">
         <div class="pointer-events-auto absolute inset-0">
-            <BuildingPreview :draft="draft" />
+            <BuildingPreview
+                :draft="draft"
+                :analytical-view="analyticalView"
+                :analytical-force-mode="analyticalForceMode"
+            />
         </div>
 
         <Button
@@ -205,22 +242,22 @@ async function exportBuilding(): Promise<void> {
         >
             <Card class="flex min-h-0 flex-1 flex-col gap-0 border-0 bg-transparent py-0 shadow-none">
                 <CardHeader class="shrink-0 border-b border-sidebar-border/70 py-4">
-                    <CardTitle>Building editor</CardTitle>
+                    <CardTitle>Portal frame editor</CardTitle>
                     <CardDescription>
-                        Design your building, search for a UK address, then drag
-                        it into position on the map.
+                        Configure the portal frame, search for a UK address, then
+                        drag it into position on the map.
                     </CardDescription>
                 </CardHeader>
 
                 <CardContent
                     class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4"
                 >
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-2 gap-3">
                         <div class="grid gap-2">
-                            <Label for="width">Width (m)</Label>
+                            <Label for="span">Span (m)</Label>
                             <Input
-                                id="width"
-                                v-model.number="draft.dimensions.width"
+                                id="span"
+                                v-model.number="draft.portalFrame.span"
                                 type="number"
                                 min="1"
                                 step="1"
@@ -228,10 +265,21 @@ async function exportBuilding(): Promise<void> {
                             />
                         </div>
                         <div class="grid gap-2">
-                            <Label for="depth">Depth (m)</Label>
+                            <Label for="eaves">Eaves height (m)</Label>
                             <Input
-                                id="depth"
-                                v-model.number="draft.dimensions.depth"
+                                id="eaves"
+                                v-model.number="draft.portalFrame.eavesHeight"
+                                type="number"
+                                min="1"
+                                step="0.5"
+                                @change="syncDraftToMap"
+                            />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="length">Building length (m)</Label>
+                            <Input
+                                id="length"
+                                v-model.number="draft.portalFrame.buildingLength"
                                 type="number"
                                 min="1"
                                 step="1"
@@ -239,28 +287,114 @@ async function exportBuilding(): Promise<void> {
                             />
                         </div>
                         <div class="grid gap-2">
-                            <Label for="height">Height (m)</Label>
+                            <Label for="bay-spacing">Bay spacing (m)</Label>
                             <Input
-                                id="height"
-                                v-model.number="draft.dimensions.height"
+                                id="bay-spacing"
+                                v-model.number="draft.portalFrame.baySpacing"
                                 type="number"
                                 min="1"
-                                step="1"
+                                step="0.5"
+                                @change="syncDraftToMap"
+                            />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="dead-load">Dead load (kN/m²)</Label>
+                            <Input
+                                id="dead-load"
+                                v-model.number="draft.portalFrame.deadLoadKnM2"
+                                type="number"
+                                min="0"
+                                step="0.05"
+                                @change="syncDraftToMap"
+                            />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="live-load">Live load (kN/m²)</Label>
+                            <Input
+                                id="live-load"
+                                v-model.number="draft.portalFrame.liveLoadKnM2"
+                                type="number"
+                                min="0"
+                                step="0.05"
                                 @change="syncDraftToMap"
                             />
                         </div>
                     </div>
 
                     <div class="grid gap-2">
-                        <Label for="color">Color</Label>
-                        <Input
-                            id="color"
-                            v-model="draft.color"
-                            type="color"
-                            class="h-10 cursor-pointer p-1"
-                            @change="syncDraftToMap"
-                        />
+                        <Label for="column-restraint">Column restraint</Label>
+                        <select
+                            id="column-restraint"
+                            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                            :value="draft.portalFrame.columnRestraint"
+                            @change="updateColumnRestraint"
+                        >
+                            <option value="restrained">Restrained</option>
+                            <option value="unrestrained">Unrestrained</option>
+                        </select>
                     </div>
+
+                    <div class="flex items-center gap-2">
+                        <Checkbox
+                            id="analytical-view"
+                            :model-value="analyticalView"
+                            @update:model-value="
+                                (value) => {
+                                    analyticalView = value === true;
+                                }
+                            "
+                        />
+                        <Label for="analytical-view" class="font-normal">
+                            Analytical view (force diagrams)
+                        </Label>
+                    </div>
+
+                    <div
+                        v-if="analyticalView"
+                        class="grid grid-cols-2 gap-2"
+                    >
+                        <Button
+                            type="button"
+                            size="sm"
+                            :variant="
+                                analyticalForceMode === 'shear'
+                                    ? 'default'
+                                    : 'outline'
+                            "
+                            @click="analyticalForceMode = 'shear'"
+                        >
+                            Shear
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            :variant="
+                                analyticalForceMode === 'moment'
+                                    ? 'default'
+                                    : 'outline'
+                            "
+                            @click="analyticalForceMode = 'moment'"
+                        >
+                            Moment
+                        </Button>
+                    </div>
+
+                    <div
+                        v-if="resolvedFrame"
+                        class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-sm"
+                    >
+                        <p>
+                            Rafter line load:
+                            {{ rafterLineLoadKnM(draft.portalFrame).toFixed(2) }} kN/m
+                        </p>
+                        <p>Lookup span: {{ resolvedFrame.lookupSpanM }} m</p>
+                        <p>Rafter: {{ resolvedFrame.rafter.name }}</p>
+                        <p>Column: {{ resolvedFrame.column.name }}</p>
+                    </div>
+
+                    <p v-if="frameError" class="text-sm text-destructive">
+                        {{ frameError }}
+                    </p>
 
                     <div class="grid grid-cols-3 gap-3">
                         <div class="grid gap-2">
@@ -300,7 +434,7 @@ async function exportBuilding(): Promise<void> {
                             type="button"
                             class="w-full"
                             variant="outline"
-                            :disabled="isExporting"
+                            :disabled="isExporting || !resolvedFrame"
                             @click="exportBuilding"
                         >
                             <Download class="size-4" />
@@ -328,9 +462,8 @@ async function exportBuilding(): Promise<void> {
                                     class="text-left hover:underline"
                                     @click="openMap({ flyToId: building.id })"
                                 >
-                                    {{ building.dimensions.width }}×{{
-                                        building.dimensions.depth
-                                    }}×{{ building.dimensions.height }}m
+                                    {{ building.portalFrame.span }}m span ×
+                                    {{ building.portalFrame.buildingLength }}m
                                 </button>
                                 <Button
                                     variant="ghost"
@@ -390,6 +523,12 @@ async function exportBuilding(): Promise<void> {
                         <Search class="size-4" />
                         {{ isSearching ? 'Searching…' : 'Find on map' }}
                     </Button>
+
+                    <p class="w-full text-xs text-muted-foreground">
+                        Envelope: {{ bounds.width.toFixed(1) }}m ×
+                        {{ bounds.depth.toFixed(1) }}m ×
+                        {{ bounds.height.toFixed(1) }}m apex
+                    </p>
                 </CardFooter>
             </Card>
         </aside>

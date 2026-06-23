@@ -167,8 +167,7 @@ export function useUkMap3d(
             building.id === id
                 ? {
                       ...building,
-                      dimensions: { ...draft.dimensions },
-                      color: draft.color,
+                      portalFrame: { ...draft.portalFrame },
                       rotation: [...draft.rotation],
                   }
                 : building,

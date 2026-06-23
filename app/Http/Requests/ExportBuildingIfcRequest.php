@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ExportBuildingIfcRequest extends FormRequest
 {
@@ -12,14 +13,19 @@ class ExportBuildingIfcRequest extends FormRequest
     }
 
     /**
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, mixed>>
      */
     public function rules(): array
     {
         return [
-            'width' => ['required', 'numeric', 'min:0.1', 'max:1000'],
-            'depth' => ['required', 'numeric', 'min:0.1', 'max:1000'],
-            'height' => ['required', 'numeric', 'min:0.1', 'max:1000'],
+            'span' => ['required', 'numeric', 'min:1', 'max:1000'],
+            'eavesHeight' => ['required', 'numeric', 'min:1', 'max:1000'],
+            'buildingLength' => ['required', 'numeric', 'min:1', 'max:1000'],
+            'baySpacing' => ['required', 'numeric', 'min:0.1', 'max:1000'],
+            'deadLoadKnM2' => ['required', 'numeric', 'min:0', 'max:1000'],
+            'liveLoadKnM2' => ['required', 'numeric', 'min:0', 'max:1000'],
+            'columnRestraint' => ['required', 'string', Rule::in(['restrained', 'unrestrained'])],
+            'roofPitchDeg' => ['nullable', 'numeric', 'min:0', 'max:45'],
             'name' => ['nullable', 'string', 'max:255'],
             'rotation' => ['nullable', 'array', 'size:3'],
             'rotation.0' => ['numeric'],
@@ -30,9 +36,14 @@ class ExportBuildingIfcRequest extends FormRequest
 
     /**
      * @return array{
-     *     width: float,
-     *     depth: float,
-     *     height: float,
+     *     span: float,
+     *     eavesHeight: float,
+     *     buildingLength: float,
+     *     baySpacing: float,
+     *     deadLoadKnM2: float,
+     *     liveLoadKnM2: float,
+     *     columnRestraint: 'restrained'|'unrestrained',
+     *     roofPitchDeg: float,
      *     name: string|null,
      *     rotation: array{0: float, 1: float, 2: float}
      * }
@@ -42,9 +53,14 @@ class ExportBuildingIfcRequest extends FormRequest
         $validated = $this->validated();
 
         return [
-            'width' => (float) $validated['width'],
-            'depth' => (float) $validated['depth'],
-            'height' => (float) $validated['height'],
+            'span' => (float) $validated['span'],
+            'eavesHeight' => (float) $validated['eavesHeight'],
+            'buildingLength' => (float) $validated['buildingLength'],
+            'baySpacing' => (float) $validated['baySpacing'],
+            'deadLoadKnM2' => (float) $validated['deadLoadKnM2'],
+            'liveLoadKnM2' => (float) $validated['liveLoadKnM2'],
+            'columnRestraint' => $validated['columnRestraint'],
+            'roofPitchDeg' => (float) ($validated['roofPitchDeg'] ?? 6.0),
             'name' => $validated['name'] ?? null,
             'rotation' => array_map(
                 floatval(...),

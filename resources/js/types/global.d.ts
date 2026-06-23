@@ -14,6 +14,11 @@ declare module 'vite/client' {
     }
 }
 
+declare module '*.csv?raw' {
+    const content: string;
+    export default content;
+}
+
 declare module '@inertiajs/core' {
     export interface InertiaConfig {
         sharedPageProps: {

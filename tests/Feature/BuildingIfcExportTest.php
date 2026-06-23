@@ -9,15 +9,19 @@ test('guests cannot export building ifc files', function () {
     $response = $this->post(route('export-ifc', [
         'current_team' => $team->slug,
     ]), [
-        'width' => 20,
-        'depth' => 15,
-        'height' => 30,
+        'span' => 24,
+        'eavesHeight' => 6,
+        'buildingLength' => 40,
+        'baySpacing' => 5,
+        'deadLoadKnM2' => 1.25,
+        'liveLoadKnM2' => 0.75,
+        'columnRestraint' => 'restrained',
     ]);
 
     $response->assertRedirect(route('login'));
 });
 
-test('authenticated users can export a building ifc file', function () {
+test('authenticated users can export a portal frame ifc file', function () {
     exec('python3 -c "import ifcopenshell" 2>/dev/null', result_code: $resultCode);
 
     if ($resultCode !== 0) {
@@ -32,18 +36,35 @@ test('authenticated users can export a building ifc file', function () {
         ->post(route('export-ifc', [
             'current_team' => $team->slug,
         ]), [
-            'width' => 20,
-            'depth' => 15,
-            'height' => 30,
+            'span' => 24,
+            'eavesHeight' => 6,
+            'buildingLength' => 40,
+            'baySpacing' => 5,
+            'deadLoadKnM2' => 1.25,
+            'liveLoadKnM2' => 0.75,
+            'columnRestraint' => 'restrained',
+            'roofPitchDeg' => 6,
             'rotation' => [0, 0, 0],
-            'name' => '20x15x30m building',
+            'name' => '24m span portal frame',
         ]);
 
     $response->assertOk();
     $response->assertHeader('content-type', 'application/x-step');
-    expect($response->getContent())->toContain('ISO-10303-21');
-    expect($response->getContent())->toContain("FILE_SCHEMA(('IFC4'))");
-    expect($response->getContent())->toContain('IFCBUILDINGELEMENTPROXY');
-    expect($response->getContent())->toContain('IFCEXTRUDEDAREASOLID');
-    expect($response->getContent())->toContain('IFCRELCONTAINEDINSPATIALSTRUCTURE');
+
+    $contents = $response->getContent();
+
+    expect($contents)->toContain('ISO-10303-21');
+    expect($contents)->toContain("FILE_SCHEMA(('IFC4'))");
+    expect($contents)->toContain('IFCCOLUMN');
+    expect($contents)->toContain('IFCBEAM');
+    expect($contents)->toContain('IFCFOOTING');
+    expect($contents)->toContain('IFCISHAPEPROFILEDEF');
+    expect($contents)->toContain('IFCRELCONTAINEDINSPATIALSTRUCTURE');
+    expect($contents)->toContain('UB 356x171x45');
+    expect($contents)->toContain('UB 406x178x74');
+    expect($contents)->toContain('frame-0-rafter-left');
+    expect($contents)->toContain('frame-0-haunch-left');
+    expect($contents)->toContain('Eaves haunch');
+    expect($contents)->toContain('IFCPOLYGONALFACESET');
+    expect($contents)->toContain('IFCISHAPEPROFILEDEF');
 });
