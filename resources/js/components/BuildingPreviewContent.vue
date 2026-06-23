@@ -110,9 +110,4 @@ onUnmounted(() => {
     <TresDirectionalLight :position="[8, 6, 12]" :intensity="1.2" />
 
     <primitive :object="frameGroup" />
-
-    <TresMesh :position="[0, 0, 0]">
-        <TresPlaneGeometry :args="[120, 120]" />
-        <TresMeshStandardMaterial color="#f3f4f6" :roughness="0.95" />
-    </TresMesh>
 </template>

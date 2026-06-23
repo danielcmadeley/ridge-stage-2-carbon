@@ -3,7 +3,7 @@ import {
     createTaperedTopAnchoredIShapeGeometry,
     memberPlacementMatrix,
 } from '@/lib/portal-frame/i-shape-geometry';
-import { memberBasis, memberLengthM } from '@/lib/portal-frame/member-basis';
+import { memberBasis, memberLengthM, isUbSection } from '@/lib/portal-frame/member-basis';
 import type { FrameMember, UbSectionDimensions } from '@/types/portal-frame';
 import { PORTAL_FRAME_STEEL_COLOR } from '@/types/portal-frame';
 
@@ -26,6 +26,10 @@ export function buildEavesHaunchMember(
     renderRafter: FrameMember,
     analysisRafter: FrameMember,
 ): FrameMember {
+    if (!isUbSection(renderRafter.section)) {
+        throw new Error('Eaves haunches require a UB rafter section.');
+    }
+
     const basis = memberBasis(renderRafter);
     const rafterHalfDepthM = renderRafter.section.h / 2000;
     const haunchLengthM = memberLengthM(analysisRafter) * HAUNCH_LENGTH_FRACTION;

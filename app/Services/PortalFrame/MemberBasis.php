@@ -50,7 +50,30 @@ readonly class MemberBasis
             } else {
                 $majorAxis = self::normalize($majorAxis);
             }
-        } elseif ($member->role === 'rafter' || $member->role === 'haunch') {
+        } elseif ($member->role === 'gable_column') {
+            $majorAxis = $start[1] < 1e-6 ? [0.0, 1.0, 0.0] : [0.0, -1.0, 0.0];
+        } elseif ($member->role === 'purlin' && $member->orientation !== null) {
+            $halfSpan = $member->orientation['halfSpan'];
+            $rise = $halfSpan * tan(deg2rad($member->orientation['roofPitchDeg']));
+            $side = $start[0] < 0 ? 'left' : 'right';
+
+            if ($side === 'left') {
+                $majorAxis = [-$rise, 0.0, $halfSpan];
+            } else {
+                $majorAxis = [$rise, 0.0, $halfSpan];
+            }
+
+            $majorAxis = self::normalize($majorAxis);
+        } elseif ($member->role === 'side_rail') {
+            $deltaX = abs($end[0] - $start[0]);
+            $deltaY = abs($end[1] - $start[1]);
+
+            if ($deltaX > $deltaY) {
+                $majorAxis = $start[1] < 1e-6 ? [0.0, 1.0, 0.0] : [0.0, -1.0, 0.0];
+            } else {
+                $majorAxis = [$start[0] < 0 ? 1.0 : -1.0, 0.0, 0.0];
+            }
+        } elseif ($member->role === 'rafter' || $member->role === 'haunch' || $member->role === 'tie' || $member->role === 'brace') {
             $majorAxis = self::normalize(self::cross($memberAxis, [0.0, 1.0, 0.0]));
 
             if ($majorAxis[2] < 0) {

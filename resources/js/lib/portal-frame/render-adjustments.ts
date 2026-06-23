@@ -1,4 +1,4 @@
-import { memberBasis } from '@/lib/portal-frame/member-basis';
+import { memberBasis, isUbSection } from '@/lib/portal-frame/member-basis';
 import type { FrameMember } from '@/types/portal-frame';
 
 const POSITION_TOLERANCE = 1e-6;
@@ -11,34 +11,54 @@ export function trimRafterAtColumnFace(
     rafter: FrameMember,
     column: FrameMember,
 ): FrameMember {
+    return trimMemberAtColumnFace(rafter, column, 'start');
+}
+
+function trimMemberAtColumnFace(
+    member: FrameMember,
+    column: FrameMember,
+    end: 'start' | 'end',
+): FrameMember {
     const columnX = column.start[0];
+
+    if (!isUbSection(column.section) || !isUbSection(member.section)) {
+        return member;
+    }
+
     const halfFlangeWidthM = column.section.b / 2000;
     const innerFaceX =
         columnX + Math.sign(-columnX || 1) * halfFlangeWidthM;
 
-    const start = rafter.start;
-    const end = rafter.end;
-    const deltaX = end[0] - start[0];
+    const start = member.start;
+    const endPoint = member.end;
+    const deltaX = endPoint[0] - start[0];
 
     if (Math.abs(deltaX) < POSITION_TOLERANCE) {
-        return rafter;
+        return member;
     }
 
     const trimFraction = (innerFaceX - start[0]) / deltaX;
 
     if (trimFraction <= 0 || trimFraction >= 1) {
-        return rafter;
+        return member;
     }
 
-    const trimmedStart: [number, number, number] = [
-        start[0] + trimFraction * (end[0] - start[0]),
-        start[1] + trimFraction * (end[1] - start[1]),
-        start[2] + trimFraction * (end[2] - start[2]),
+    const trimmedPoint: [number, number, number] = [
+        start[0] + trimFraction * (endPoint[0] - start[0]),
+        start[1] + trimFraction * (endPoint[1] - start[1]),
+        start[2] + trimFraction * (endPoint[2] - start[2]),
     ];
 
+    if (end === 'start') {
+        return {
+            ...member,
+            start: trimmedPoint,
+        };
+    }
+
     return {
-        ...rafter,
-        start: trimmedStart,
+        ...member,
+        end: trimmedPoint,
     };
 }
 
@@ -49,6 +69,10 @@ export function extendColumnToRafterTop(
     column: FrameMember,
     rafter: FrameMember,
 ): FrameMember {
+    if (!isUbSection(column.section) || !isUbSection(rafter.section)) {
+        return column;
+    }
+
     const { majorAxis } = memberBasis(rafter);
     const halfRafterDepthM = rafter.section.h / 2000;
     const verticalExtension = majorAxis.z * halfRafterDepthM;

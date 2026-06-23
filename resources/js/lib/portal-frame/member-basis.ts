@@ -1,7 +1,13 @@
 import { Vector3 } from 'three';
-import type { FrameMember } from '@/types/portal-frame';
+import type { FrameMember, UbSectionDimensions } from '@/types/portal-frame';
 
 const BUILDING_AXIS = new Vector3(0, 1, 0);
+
+export function isUbSection(
+    section: FrameMember['section'],
+): section is UbSectionDimensions {
+    return section.profile === 'ub';
+}
 
 export type MemberBasis = {
     start: Vector3;
@@ -41,7 +47,36 @@ export function memberBasis(member: FrameMember): MemberBasis {
         } else {
             majorAxis.normalize();
         }
-    } else if (member.role === 'rafter' || member.role === 'haunch') {
+    } else if (member.role === 'gable_column') {
+        majorAxis = start.y < 1e-6 ? new Vector3(0, 1, 0) : new Vector3(0, -1, 0);
+    } else if (member.role === 'purlin' && member.orientation) {
+        const { halfSpan, roofPitchDeg } = member.orientation;
+        const pitchRadians = (roofPitchDeg * Math.PI) / 180;
+        const rise = halfSpan * Math.tan(pitchRadians);
+        const side = start.x < 0 ? 'left' : 'right';
+
+        if (side === 'left') {
+            majorAxis = new Vector3(-rise, 0, halfSpan);
+        } else {
+            majorAxis = new Vector3(rise, 0, halfSpan);
+        }
+
+        majorAxis.normalize();
+    } else if (member.role === 'side_rail') {
+        const deltaX = Math.abs(end.x - start.x);
+        const deltaY = Math.abs(end.y - start.y);
+
+        if (deltaX > deltaY) {
+            majorAxis = start.y < 1e-6 ? new Vector3(0, 1, 0) : new Vector3(0, -1, 0);
+        } else {
+            majorAxis = new Vector3(start.x < 0 ? 1 : -1, 0, 0);
+        }
+    } else if (
+        member.role === 'rafter' ||
+        member.role === 'haunch' ||
+        member.role === 'tie' ||
+        member.role === 'brace'
+    ) {
         majorAxis = new Vector3().crossVectors(memberAxis, BUILDING_AXIS);
 
         if (majorAxis.lengthSq() < 1e-9) {

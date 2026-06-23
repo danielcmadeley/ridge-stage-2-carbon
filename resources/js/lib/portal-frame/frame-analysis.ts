@@ -1,5 +1,9 @@
 import type { BuiltPortalFrame } from '@/lib/portal-frame/geometry-builder';
-import type { FrameMember, UbSectionDimensions } from '@/types/portal-frame';
+import type { FrameMember, PortalFrameDesign, UbSectionDimensions } from '@/types/portal-frame';
+import {
+    rafterLineLoadKnMForFrame,
+    representativeInteriorFrameIndex,
+} from '@/types/portal-frame';
 
 /** Steel Young's modulus (kN/m²). */
 const E_STEEL_KN_M2 = 210e6;
@@ -34,6 +38,11 @@ export type FrameAnalysisResult = {
     apexHorizontalDisplacementM: number;
     /** Vertical displacement at apex (m). */
     apexVerticalDisplacementM: number;
+};
+
+export type FrameAnalysisOptions = {
+    frameIndex?: number;
+    lineLoadKnM?: number;
 };
 
 type Node2D = {
@@ -466,10 +475,15 @@ function buildFrameModel(members: FrameMember[]): {
     return { nodes, elements };
 }
 
-function extractFrameZeroMembers(built: BuiltPortalFrame): FrameMember[] {
+function extractFrameMembers(
+    built: BuiltPortalFrame,
+    frameIndex: number,
+): FrameMember[] {
+    const prefix = `frame-${frameIndex}-`;
+
     return built.members.filter(
         (member) =>
-            member.id.startsWith('frame-0-') &&
+            member.id.startsWith(prefix) &&
             (member.role === 'column' || member.role === 'rafter'),
     );
 }
@@ -489,15 +503,20 @@ function findBaseNodeIndices(nodes: Node2D[]): { left: number; right: number } {
     };
 }
 
-export function analyzePortalFrame(built: BuiltPortalFrame): FrameAnalysisResult {
-    const members = extractFrameZeroMembers(built);
+export function analyzePortalFrame(
+    built: BuiltPortalFrame,
+    options: FrameAnalysisOptions = {},
+): FrameAnalysisResult {
+    const frameIndex = options.frameIndex ?? 0;
+    const lineLoadKnM = options.lineLoadKnM ?? built.rafterLineLoadKnM;
+    const members = extractFrameMembers(built, frameIndex);
     const { nodes, elements } = buildFrameModel(members);
     const stiffness = assembleGlobalStiffness(nodes.length, elements, nodes);
     const load = assembleLoadVector(
         nodes.length,
         elements,
         nodes,
-        built.rafterLineLoadKnM,
+        lineLoadKnM,
     );
 
     const { left: leftBaseIndex, right: rightBaseIndex } = findBaseNodeIndices(nodes);
@@ -554,4 +573,17 @@ export function analyzePortalFrame(built: BuiltPortalFrame): FrameAnalysisResult
         apexHorizontalDisplacementM,
         apexVerticalDisplacementM,
     };
+}
+
+/** Analyse the governing interior frame for reactions and foundation sizing. */
+export function analyzeGoverningPortalFrame(
+    built: BuiltPortalFrame,
+    design: PortalFrameDesign,
+): FrameAnalysisResult {
+    const frameIndex = representativeInteriorFrameIndex(design);
+
+    return analyzePortalFrame(built, {
+        frameIndex,
+        lineLoadKnM: rafterLineLoadKnMForFrame(design, frameIndex),
+    });
 }

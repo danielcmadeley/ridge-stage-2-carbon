@@ -14,6 +14,8 @@ from export_building_ifc import (  # noqa: E402
     create_tapered_top_anchored_i_shape_mesh,
     export_portal_frame,
     haunch_depth_factor_at,
+    z_shape_profile_points,
+    c_shape_profile_points,
 )
 
 
@@ -134,6 +136,98 @@ class ExportBuildingIfcTest(unittest.TestCase):
 
         self.assertLess(min(z_values), anchor_z - 0.4)
         self.assertAlmostEqual(max(z_values), 5.94, delta=0.02)
+
+    def test_z_and_c_profile_points_match_section_dimensions(self) -> None:
+        z_points = z_shape_profile_points(
+            {
+                "name": "202 Z 16",
+                "depth": 202.0,
+                "topFlange": 65.0,
+                "bottomFlange": 60.0,
+                "t": 1.6,
+            }
+        )
+        c_points = c_shape_profile_points(
+            {
+                "name": "202 C 16",
+                "depth": 202.0,
+                "flange": 65.0,
+                "t": 1.6,
+            }
+        )
+
+        self.assertEqual(len(z_points), 9)
+        self.assertEqual(len(c_points), 8)
+
+    def test_export_writes_purlin_and_side_rail_members(self) -> None:
+        payload = {
+            "name": "test",
+            "rotation": [0.0, 0.0, 0.0],
+            "members": [
+                {
+                    "id": "purlin-left-0",
+                    "role": "purlin",
+                    "start": [-11.0, 0.0, 6.1],
+                    "end": [-11.0, 40.0, 6.1],
+                    "orientation": {"halfSpan": 12.0, "roofPitchDeg": 6.0},
+                    "section": {
+                        "profile": "z",
+                        "name": "202 Z 16",
+                        "depth": 202.0,
+                        "topFlange": 65.0,
+                        "bottomFlange": 60.0,
+                        "t": 1.6,
+                    },
+                },
+                {
+                    "id": "side-rail-left-0",
+                    "role": "side_rail",
+                    "start": [-12.0, 0.0, 1.0],
+                    "end": [-12.0, 40.0, 1.0],
+                    "section": {
+                        "profile": "c",
+                        "name": "202 C 16",
+                        "depth": 202.0,
+                        "flange": 65.0,
+                        "t": 1.6,
+                    },
+                },
+            ],
+            "haunches": [],
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".ifc") as handle:
+            model = export_portal_frame(payload)
+            model.write(handle.name)
+            contents = Path(handle.name).read_text().upper()
+
+        self.assertIn("PURLIN-LEFT-0", contents)
+        self.assertIn("SIDE-RAIL-LEFT-0", contents)
+        self.assertIn("IFCARBITRARYCLOSEDPROFILEDEF", contents)
+        self.assertIn("IFCCSHAPEPROFILEDEF", contents)
+
+    def test_export_writes_ground_floor_slab(self) -> None:
+        payload = {
+            "name": "test",
+            "rotation": [0.0, 0.0, 0.0],
+            "members": [],
+            "haunches": [],
+            "slab": {
+                "id": "ground-floor-slab",
+                "width": 24.0,
+                "length": 40.0,
+                "depth": 0.25,
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".ifc") as handle:
+            model = export_portal_frame(payload)
+            model.write(handle.name)
+            contents = Path(handle.name).read_text().upper()
+
+        self.assertIn("IFCSLAB", contents)
+        self.assertIn("GROUND-FLOOR-SLAB", contents)
+        self.assertIn("GROUND FLOOR SLAB", contents)
 
 
 if __name__ == "__main__":

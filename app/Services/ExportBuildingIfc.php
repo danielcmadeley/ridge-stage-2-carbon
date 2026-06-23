@@ -9,6 +9,8 @@ use RuntimeException;
 
 class ExportBuildingIfc
 {
+    private const GROUND_FLOOR_SLAB_DEPTH_M = 0.25;
+
     public function __construct(
         private readonly PortalFrameDesignResolver $portalFrameDesignResolver,
     ) {}
@@ -23,6 +25,7 @@ class ExportBuildingIfc
      *     liveLoadKnM2: float|int,
      *     columnRestraint: 'restrained'|'unrestrained',
      *     roofPitchDeg?: float|int,
+     *     foundation?: array{type?: string, assumptions?: array<string, float|int>},
      *     name?: string|null,
      *     rotation?: array{0: float|int, 1: float|int, 2: float|int}
      * }  $payload
@@ -47,6 +50,12 @@ class ExportBuildingIfc
                 'rotation' => $payload['rotation'] ?? [0, 0, 0],
                 'members' => $resolved['members'],
                 'haunches' => $resolved['haunches'],
+                'slab' => [
+                    'id' => 'ground-floor-slab',
+                    'width' => $design->span,
+                    'length' => $design->buildingLength,
+                    'depth' => self::GROUND_FLOOR_SLAB_DEPTH_M,
+                ],
             ], JSON_THROW_ON_ERROR))
             ->run([
                 config('services.ifc.python_binary'),

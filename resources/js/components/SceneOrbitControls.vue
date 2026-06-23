@@ -23,23 +23,30 @@ const props = withDefaults(
 
 const { camera, renderer, controls: tresControls } = useTresContext();
 const controlsRef = shallowRef<OrbitControls | null>(null);
+const controlTarget = shallowRef<[number, number, number]>([...props.target]);
+const initializedControls = new WeakSet<OrbitControls>();
 
 const activeCamera = computed(() => camera.activeCamera.value);
 const domElement = computed(() => renderer.instance.domElement);
 
-watch(
-    () => props.initialPosition,
-    (position) => {
-        if (!activeCamera.value || !position) {
-            return;
-        }
+function applyInitialView(instance: OrbitControls): void {
+    if (initializedControls.has(instance) || !activeCamera.value) {
+        return;
+    }
 
-        activeCamera.value.up.set(...props.up);
-        activeCamera.value.position.set(...position);
-        controlsRef.value?.update();
-    },
-    { immediate: true },
-);
+    activeCamera.value.up.set(...props.up);
+
+    if (props.initialPosition) {
+        activeCamera.value.position.set(...props.initialPosition);
+    }
+
+    controlTarget.value = [...props.target];
+    instance.target.set(...props.target);
+    instance.minDistance = props.minDistance;
+    instance.maxDistance = props.maxDistance;
+    instance.update();
+    initializedControls.add(instance);
+}
 
 watch(controlsRef, (instance) => {
     tresControls.value = instance;
@@ -48,20 +55,27 @@ watch(controlsRef, (instance) => {
         return;
     }
 
+    applyInitialView(instance);
+
     instance.addEventListener('change', () => {
         renderer.invalidate();
     });
 });
 
+watch(activeCamera, () => {
+    if (controlsRef.value) {
+        applyInitialView(controlsRef.value);
+    }
+});
+
 watch(
-    () => [props.minDistance, props.maxDistance, props.target, props.up] as const,
-    ([minDistance, maxDistance, target, up]) => {
+    () => [props.minDistance, props.maxDistance, props.up] as const,
+    ([minDistance, maxDistance, up]) => {
         if (!controlsRef.value || !activeCamera.value) {
             return;
         }
 
         activeCamera.value.up.set(...up);
-        controlsRef.value.target.set(...target);
         controlsRef.value.minDistance = minDistance;
         controlsRef.value.maxDistance = maxDistance;
     },
@@ -84,7 +98,7 @@ onUnmounted(() => {
         :key="activeCamera.uuid"
         ref="controlsRef"
         :args="[activeCamera, domElement]"
-        :target="target"
+        :target="controlTarget"
         :enable-damping="true"
         :damping-factor="0.05"
         :enable-rotate="true"

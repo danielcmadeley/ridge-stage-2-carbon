@@ -2,7 +2,7 @@
 
 namespace App\Data;
 
-readonly class UbSection
+readonly class UbSection implements MemberSection
 {
     public function __construct(
         public string $name,
@@ -13,11 +13,12 @@ readonly class UbSection
     ) {}
 
     /**
-     * @return array{name: string, h: float, b: float, tw: float, tf: float}
+     * @return array{name: string, profile: string, h: float, b: float, tw: float, tf: float}
      */
     public function toArray(): array
     {
         return [
+            'profile' => 'ub',
             'name' => $this->name,
             'h' => $this->h,
             'b' => $this->b,

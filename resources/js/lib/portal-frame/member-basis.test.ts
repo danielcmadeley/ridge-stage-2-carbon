@@ -23,4 +23,16 @@ describe('memberBasis', () => {
             expect(basis.majorAxis.z).toBeGreaterThan(0);
         }
     });
+
+    it('orients gable columns ninety degrees with major axis along building length', () => {
+        const member: FrameMember = {
+            id: 'gable-front-column-1',
+            role: 'gable_column',
+            start: [-6, 0, 0],
+            end: [-6, 0, 6.5],
+            section: findUbSection('UB 203x133x25'),
+        };
+
+        expect(memberBasis(member).majorAxis.toArray()).toEqual([0, 1, 0]);
+    });
 });

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { Vector3 } from 'three';
+import { Mesh, Vector3 } from 'three';
 import { analyzePortalFrame } from '@/lib/portal-frame/frame-analysis';
 import { momentDiagramNormal, createForceDiagramGroup } from '@/lib/portal-frame/force-diagram-3d';
 import { collectForceDiagramObjects } from '@/lib/portal-frame/force-diagram-hover';
 import { buildPortalFrame } from '@/lib/portal-frame/geometry-builder';
-import { defaultPortalFrameDesign } from '@/types/portal-frame';
+import { defaultPortalFrameDesign, rafterLineLoadKnMForFrame } from '@/types/portal-frame';
 import type { FrameMember } from '@/types/portal-frame';
+import type { AnalyticalForceMode } from '@/lib/portal-frame/force-diagram-3d';
 
 function frameZeroMember(built: ReturnType<typeof buildPortalFrame>, id: string): FrameMember {
     const member = built.members.find((candidate) => candidate.id === id);
@@ -27,14 +28,18 @@ function momentOffset(member: FrameMember, value: number): Vector3 {
 
 describe('moment diagram rendering', () => {
     it('plots opposite members as mirror images, not inversions', () => {
-        const built = buildPortalFrame(defaultPortalFrameDesign());
-        const analysis = analyzePortalFrame(built);
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
+        const analysis = analyzePortalFrame(built, {
+            frameIndex: 1,
+            lineLoadKnM: rafterLineLoadKnMForFrame(design, 1),
+        });
 
         const byId = new Map(analysis.members.map((member) => [member.id, member]));
 
         for (const pair of [
-            ['frame-0-column-left', 'frame-0-column-right'],
-            ['frame-0-rafter-left', 'frame-0-rafter-right'],
+            ['frame-1-column-left', 'frame-1-column-right'],
+            ['frame-1-rafter-left', 'frame-1-rafter-right'],
         ] as const) {
             const [leftId, rightId] = pair;
             const leftAnalysis = byId.get(leftId)!;
@@ -62,13 +67,17 @@ describe('moment diagram rendering', () => {
     });
 
     it('draws the hogging eaves moment on the outer face of both columns', () => {
-        const built = buildPortalFrame(defaultPortalFrameDesign());
-        const analysis = analyzePortalFrame(built);
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
+        const analysis = analyzePortalFrame(built, {
+            frameIndex: 1,
+            lineLoadKnM: rafterLineLoadKnMForFrame(design, 1),
+        });
         const byId = new Map(analysis.members.map((member) => [member.id, member]));
 
         for (const side of ['left', 'right'] as const) {
-            const member = frameZeroMember(built, `frame-0-column-${side}`);
-            const columnAnalysis = byId.get(`frame-0-column-${side}`)!;
+            const member = frameZeroMember(built, `frame-1-column-${side}`);
+            const columnAnalysis = byId.get(`frame-1-column-${side}`)!;
             const eavesMoment =
                 columnAnalysis.momentKnm[columnAnalysis.momentKnm.length - 1];
             const offset = momentOffset(member, eavesMoment);
@@ -80,11 +89,12 @@ describe('moment diagram rendering', () => {
     });
 
     it('attaches hover metadata to rendered force diagram objects', () => {
-        const built = buildPortalFrame(defaultPortalFrameDesign());
-        const analysis = analyzePortalFrame(built);
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
         const group = createForceDiagramGroup(
             built.members,
-            analysis.members,
+            built,
+            design,
             'moment',
         );
 
@@ -99,4 +109,56 @@ describe('moment diagram rendering', () => {
             );
         }
     });
+
+    it('uses smaller moments on gable end frames than interior frames', () => {
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
+        const group = createForceDiagramGroup(
+            built.members,
+            built,
+            design,
+            'moment',
+        );
+        const hoverTargets = collectForceDiagramObjects(group);
+        const gableHover = hoverTargets.find(
+            (target) => target.userData.forceDiagramHover.member.id === 'frame-0-column-left',
+        );
+        const interiorHover = hoverTargets.find(
+            (target) => target.userData.forceDiagramHover.member.id === 'frame-1-column-left',
+        );
+
+        const gableEavesMoment = Math.abs(
+            gableHover!.userData.forceDiagramHover.analysis.momentKnm.at(-1)!,
+        );
+        const interiorEavesMoment = Math.abs(
+            interiorHover!.userData.forceDiagramHover.analysis.momentKnm.at(-1)!,
+        );
+
+        expect(gableEavesMoment).toBeCloseTo(interiorEavesMoment / 2, 1);
+    });
+});
+
+describe('shear and axial diagram rendering', () => {
+    it.each(['shear', 'axial'] as const)(
+        'fills the area between the member and the %s diagram',
+        (mode: AnalyticalForceMode) => {
+            const design = defaultPortalFrameDesign();
+            const built = buildPortalFrame(design);
+            const group = createForceDiagramGroup(
+                built.members,
+                built,
+                design,
+                mode,
+            );
+            const hoverTargets = collectForceDiagramObjects(group);
+            const fillMeshes = hoverTargets.filter((target) => target instanceof Mesh);
+
+            expect(fillMeshes.length).toBeGreaterThan(0);
+            expect(hoverTargets.length).toBeGreaterThan(fillMeshes.length);
+
+            for (const mesh of fillMeshes) {
+                expect(mesh.userData.forceDiagramHover.mode).toBe(mode);
+            }
+        },
+    );
 });

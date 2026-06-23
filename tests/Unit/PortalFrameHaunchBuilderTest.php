@@ -1,21 +1,35 @@
 <?php
 
 use App\Data\PortalFrameDesign;
+use App\Services\PortalFrame\ChsSectionCatalog;
+use App\Services\PortalFrame\CSectionCatalog;
+use App\Services\PortalFrame\GableBracingBuilder;
+use App\Services\PortalFrame\GableColumnBuilder;
 use App\Services\PortalFrame\P399SectionLookup;
 use App\Services\PortalFrame\PortalFrameDesignResolver;
 use App\Services\PortalFrame\PortalFrameGeometryBuilder;
 use App\Services\PortalFrame\PortalFrameHaunchBuilder;
 use App\Services\PortalFrame\PortalFrameRenderAdjustments;
+use App\Services\PortalFrame\PurlinBuilder;
+use App\Services\PortalFrame\SideRailBuilder;
 use App\Services\PortalFrame\UbSectionCatalog;
+use App\Services\PortalFrame\ZSectionCatalog;
 
 function portalFrameExportResolver(): PortalFrameDesignResolver
 {
     $dataPath = static fn (string $filename): string => dirname(__DIR__, 2).'/data/'.$filename;
+    $ubCatalog = new UbSectionCatalog($dataPath('ub-sections.csv'));
 
     return new PortalFrameDesignResolver(
         new PortalFrameGeometryBuilder(
             new P399SectionLookup($dataPath('p399-portal-frame-data.csv')),
-            new UbSectionCatalog($dataPath('ub-sections.csv')),
+            $ubCatalog,
+            new ZSectionCatalog($dataPath('z_sections.csv')),
+            new CSectionCatalog($dataPath('c_sections.csv')),
+            new GableBracingBuilder(new ChsSectionCatalog($dataPath('chs_sections.csv'))),
+            new PurlinBuilder,
+            new GableColumnBuilder(new PurlinBuilder),
+            new SideRailBuilder,
         ),
         new PortalFrameRenderAdjustments,
         new PortalFrameHaunchBuilder,

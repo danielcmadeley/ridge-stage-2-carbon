@@ -1,9 +1,16 @@
 <?php
 
 use App\Data\PortalFrameDesign;
+use App\Services\PortalFrame\ChsSectionCatalog;
+use App\Services\PortalFrame\CSectionCatalog;
+use App\Services\PortalFrame\GableBracingBuilder;
+use App\Services\PortalFrame\GableColumnBuilder;
 use App\Services\PortalFrame\P399SectionLookup;
 use App\Services\PortalFrame\PortalFrameGeometryBuilder;
+use App\Services\PortalFrame\PurlinBuilder;
+use App\Services\PortalFrame\SideRailBuilder;
 use App\Services\PortalFrame\UbSectionCatalog;
+use App\Services\PortalFrame\ZSectionCatalog;
 
 function portalFrameDataPath(string $filename): string
 {
@@ -12,9 +19,18 @@ function portalFrameDataPath(string $filename): string
 
 function portalFrameServices(): PortalFrameGeometryBuilder
 {
+    $ubCatalog = new UbSectionCatalog(portalFrameDataPath('ub-sections.csv'));
+    $chsCatalog = new ChsSectionCatalog(portalFrameDataPath('chs_sections.csv'));
+
     return new PortalFrameGeometryBuilder(
         new P399SectionLookup(portalFrameDataPath('p399-portal-frame-data.csv')),
-        new UbSectionCatalog(portalFrameDataPath('ub-sections.csv')),
+        $ubCatalog,
+        new ZSectionCatalog(portalFrameDataPath('z_sections.csv')),
+        new CSectionCatalog(portalFrameDataPath('c_sections.csv')),
+        new GableBracingBuilder($chsCatalog),
+        new PurlinBuilder,
+        new GableColumnBuilder(new PurlinBuilder),
+        new SideRailBuilder,
     );
 }
 
@@ -50,8 +66,13 @@ test('portal frame geometry creates expected member counts', function () {
     // Defaults: 40 m building length at 5 m bay spacing -> 8 bays -> 9 frames.
     $members = portalFrameServices()->build(PortalFrameDesign::defaults())['members'];
 
-    expect($members)->toHaveCount(54)
+    expect($members)->toHaveCount(116)
         ->and(collect($members)->where('role', 'column'))->toHaveCount(18)
+        ->and(collect($members)->where('role', 'gable_column'))->toHaveCount(6)
         ->and(collect($members)->where('role', 'rafter'))->toHaveCount(18)
-        ->and(collect($members)->where('role', 'foundation'))->toHaveCount(18);
+        ->and(collect($members)->where('role', 'foundation'))->toHaveCount(24)
+        ->and(collect($members)->where('role', 'tie'))->toHaveCount(2)
+        ->and(collect($members)->where('role', 'brace'))->toHaveCount(16)
+        ->and(collect($members)->where('role', 'purlin'))->toHaveCount(16)
+        ->and(collect($members)->where('role', 'side_rail'))->toHaveCount(16);
 });

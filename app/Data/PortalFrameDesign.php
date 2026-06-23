@@ -6,6 +6,8 @@ readonly class PortalFrameDesign
 {
     /**
      * @param  'restrained'|'unrestrained'  $columnRestraint
+     * @param  'two_pile_cap'|'reinforced_pad'|'mass_filled'  $foundationType
+     * @param  array<string, float|int>  $foundationAssumptions
      */
     public function __construct(
         public float $span,
@@ -16,6 +18,8 @@ readonly class PortalFrameDesign
         public float $liveLoadKnM2,
         public string $columnRestraint,
         public float $roofPitchDeg = 6.0,
+        public string $foundationType = 'reinforced_pad',
+        public array $foundationAssumptions = [],
     ) {}
 
     public static function defaults(): self
@@ -29,7 +33,28 @@ readonly class PortalFrameDesign
             liveLoadKnM2: 0.75,
             columnRestraint: 'restrained',
             roofPitchDeg: 6.0,
+            foundationType: 'reinforced_pad',
+            foundationAssumptions: self::defaultFoundationAssumptions(),
         );
+    }
+
+    /**
+     * @return array<string, float|int>
+     */
+    public static function defaultFoundationAssumptions(): array
+    {
+        return [
+            'allowableBearingKpa' => 150,
+            'pileWorkingCapacityKn' => 300,
+            'pileDiameterM' => 0.45,
+            'pileSpacingFactor' => 3,
+            'concreteDensityKnM3' => 24,
+            'soilCoverDensityKnM3' => 18,
+            'frictionCoefficient' => 0.45,
+            'concreteCoverM' => 0.05,
+            'reinforcementYieldStrengthMpa' => 500,
+            'preferredBarDiameterMm' => 12,
+        ];
     }
 
     /**
@@ -46,6 +71,11 @@ readonly class PortalFrameDesign
             liveLoadKnM2: (float) $attributes['liveLoadKnM2'],
             columnRestraint: (string) $attributes['columnRestraint'],
             roofPitchDeg: (float) ($attributes['roofPitchDeg'] ?? 6.0),
+            foundationType: (string) data_get($attributes, 'foundation.type', 'reinforced_pad'),
+            foundationAssumptions: array_merge(
+                self::defaultFoundationAssumptions(),
+                array_map('floatval', data_get($attributes, 'foundation.assumptions', [])),
+            ),
         );
     }
 
@@ -55,7 +85,7 @@ readonly class PortalFrameDesign
     }
 
     /**
-     * @return array<string, float|int|string>
+     * @return array<string, float|int|string|array<string, mixed>>
      */
     public function toArray(): array
     {
@@ -68,6 +98,10 @@ readonly class PortalFrameDesign
             'liveLoadKnM2' => $this->liveLoadKnM2,
             'columnRestraint' => $this->columnRestraint,
             'roofPitchDeg' => $this->roofPitchDeg,
+            'foundation' => [
+                'type' => $this->foundationType,
+                'assumptions' => $this->foundationAssumptions,
+            ],
         ];
     }
 }

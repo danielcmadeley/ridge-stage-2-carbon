@@ -1,6 +1,7 @@
 import {
     BoxGeometry,
     BufferGeometry,
+    CylinderGeometry,
     ExtrudeGeometry,
     Float32BufferAttribute,
     Matrix4,
@@ -10,9 +11,13 @@ import {
     Vector3,
 } from 'three';
 import { memberBasis } from '@/lib/portal-frame/member-basis';
+import { createChsShapeGeometry } from '@/lib/portal-frame/chs-shape-geometry';
+import { createCShapeGeometry } from '@/lib/portal-frame/c-shape-geometry';
+import { createZShapeGeometry } from '@/lib/portal-frame/z-shape-geometry';
 import type { FrameMember, UbSectionDimensions } from '@/types/portal-frame';
 import {
     PORTAL_FRAME_FOUNDATION_COLOR,
+    PORTAL_FRAME_SECONDARY_STEEL_COLOR,
     PORTAL_FRAME_STEEL_COLOR,
 } from '@/types/portal-frame';
 
@@ -224,6 +229,13 @@ function createFootingGeometry(
     return new BoxGeometry(widthM, depthM, heightM);
 }
 
+function createPileGeometry(diameterM: number, depthM: number): CylinderGeometry {
+    const geometry = new CylinderGeometry(diameterM / 2, diameterM / 2, depthM, 32);
+    geometry.rotateX(Math.PI / 2);
+
+    return geometry;
+}
+
 export function memberPlacementMatrix(member: FrameMember): Matrix4 {
     const basis = memberBasis(member);
 
@@ -247,6 +259,23 @@ export function createFrameMemberMesh(member: FrameMember): Mesh {
     const end = member.end;
     const length = new Vector3(...end).sub(new Vector3(...start)).length();
 
+    if (member.role === 'foundation' && member.pile) {
+        const geometry = createPileGeometry(member.pile.diameter, member.pile.depth);
+        const material = new MeshStandardMaterial({
+            color: PORTAL_FRAME_FOUNDATION_COLOR,
+            metalness: 0.05,
+            roughness: 0.9,
+        });
+        const mesh = new Mesh(geometry, material);
+        mesh.position.set(
+            (start[0] + end[0]) / 2,
+            (start[1] + end[1]) / 2,
+            (start[2] + end[2]) / 2,
+        );
+
+        return mesh;
+    }
+
     if (member.role === 'foundation' && member.footing) {
         const geometry = createFootingGeometry(
             member.footing.width,
@@ -264,17 +293,28 @@ export function createFrameMemberMesh(member: FrameMember): Mesh {
         return mesh;
     }
 
-    const geometry = createIShapeGeometry(
-        member.section.h,
-        member.section.b,
-        member.section.tw,
-        member.section.tf,
-        length,
-    );
+    const geometry =
+        member.section.profile === 'z'
+            ? createZShapeGeometry(member.section, length)
+            : member.section.profile === 'c'
+              ? createCShapeGeometry(member.section, length)
+              : member.section.profile === 'chs'
+                ? createChsShapeGeometry(member.section, length)
+                : createIShapeGeometry(
+                      member.section.h,
+                      member.section.b,
+                      member.section.tw,
+                      member.section.tf,
+                      length,
+                  );
+    const steelColor =
+        member.role === 'purlin' || member.role === 'side_rail'
+            ? PORTAL_FRAME_SECONDARY_STEEL_COLOR
+            : PORTAL_FRAME_STEEL_COLOR;
     const material = new MeshStandardMaterial({
-        color: PORTAL_FRAME_STEEL_COLOR,
-        metalness: 0.3,
-        roughness: 0.55,
+        color: steelColor,
+        metalness: member.role === 'purlin' || member.role === 'side_rail' ? 0.15 : 0.3,
+        roughness: member.role === 'purlin' || member.role === 'side_rail' ? 0.75 : 0.55,
     });
     const mesh = new Mesh(geometry, material);
     mesh.applyMatrix4(memberPlacementMatrix(member));

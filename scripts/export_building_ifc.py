@@ -119,10 +119,19 @@ def building_placement_matrix(rotation: list[float]) -> numpy.ndarray:
     return matrix
 
 
+def translation_matrix(x: float, y: float, z: float) -> numpy.ndarray:
+    matrix = numpy.eye(4)
+    matrix[:3, 3] = numpy.array([x, y, z], dtype=float)
+
+    return matrix
+
+
 def member_axis_matrix(
     start: list[float],
     end: list[float],
     role: str,
+    *,
+    orientation: dict[str, Any] | None = None,
 ) -> numpy.ndarray:
     start_vector = numpy.array(start, dtype=float)
     end_vector = numpy.array(end, dtype=float)
@@ -145,7 +154,28 @@ def member_axis_matrix(
             major_axis = numpy.array([1.0, 0.0, 0.0])
         else:
             major_axis = major_axis / numpy.linalg.norm(major_axis)
-    elif role == "rafter" or role == "haunch":
+    elif role == "gable_column":
+        major_axis = numpy.array([0.0, 1.0, 0.0]) if start_vector[1] < 1e-6 else numpy.array([0.0, -1.0, 0.0])
+    elif role == "purlin" and orientation is not None:
+        half_span = float(orientation["halfSpan"])
+        rise = half_span * math.tan(math.radians(float(orientation["roofPitchDeg"])))
+        side = "left" if start_vector[0] < 0 else "right"
+
+        if side == "left":
+            major_axis = numpy.array([-rise, 0.0, half_span])
+        else:
+            major_axis = numpy.array([rise, 0.0, half_span])
+
+        major_axis = major_axis / numpy.linalg.norm(major_axis)
+    elif role == "side_rail":
+        delta_x = abs(end_vector[0] - start_vector[0])
+        delta_y = abs(end_vector[1] - start_vector[1])
+
+        if delta_x > delta_y:
+            major_axis = numpy.array([0.0, 1.0, 0.0]) if start_vector[1] < 1e-6 else numpy.array([0.0, -1.0, 0.0])
+        else:
+            major_axis = numpy.array([1.0 if start_vector[0] < 0 else -1.0, 0.0, 0.0])
+    elif role == "rafter" or role == "haunch" or role == "tie" or role == "brace":
         major_axis = numpy.cross(member_axis, building_axis)
 
         if numpy.linalg.norm(major_axis) < 1e-9:
@@ -179,6 +209,44 @@ def member_axis_matrix(
     return matrix
 
 
+def z_shape_profile_points(section: dict[str, Any]) -> list[tuple[float, float]]:
+    depth = section["depth"] / 1000.0
+    top_flange = section["topFlange"] / 1000.0
+    bottom_flange = section["bottomFlange"] / 1000.0
+    thickness = section["t"] / 1000.0
+    half_depth = depth / 2.0
+
+    return [
+        (-bottom_flange, -half_depth),
+        (0.0, -half_depth),
+        (0.0, half_depth - thickness),
+        (top_flange - thickness, half_depth - thickness),
+        (top_flange - thickness, half_depth),
+        (0.0, half_depth),
+        (0.0, -half_depth + thickness),
+        (-bottom_flange + thickness, -half_depth + thickness),
+        (-bottom_flange + thickness, -half_depth),
+    ]
+
+
+def c_shape_profile_points(section: dict[str, Any]) -> list[tuple[float, float]]:
+    depth = section["depth"] / 1000.0
+    flange = section["flange"] / 1000.0
+    thickness = section["t"] / 1000.0
+    half_depth = depth / 2.0
+
+    return [
+        (0.0, -half_depth),
+        (flange, -half_depth),
+        (flange, -half_depth + thickness),
+        (thickness, -half_depth + thickness),
+        (thickness, half_depth - thickness),
+        (flange, half_depth - thickness),
+        (flange, half_depth),
+        (0.0, half_depth),
+    ]
+
+
 def create_i_shape_profile(model, section: dict[str, Any]):
     return model.create_entity(
         "IfcIShapeProfileDef",
@@ -188,6 +256,67 @@ def create_i_shape_profile(model, section: dict[str, Any]):
         OverallDepth=section["h"] / 1000.0,
         WebThickness=section["tw"] / 1000.0,
         FlangeThickness=section["tf"] / 1000.0,
+    )
+
+
+def create_z_shape_profile(model, section: dict[str, Any]):
+    points = z_shape_profile_points(section)
+    polyline = model.create_entity(
+        "IfcPolyline",
+        Points=[model.create_entity("IfcCartesianPoint", Coordinates=[x, y]) for x, y in points + [points[0]]],
+    )
+
+    return model.create_entity(
+        "IfcArbitraryClosedProfileDef",
+        ProfileType="AREA",
+        ProfileName=section["name"],
+        OuterCurve=polyline,
+    )
+
+
+def create_c_shape_profile(model, section: dict[str, Any]):
+    return model.create_entity(
+        "IfcCShapeProfileDef",
+        ProfileName=section["name"],
+        ProfileType="AREA",
+        Depth=section["depth"] / 1000.0,
+        Width=section["flange"] / 1000.0,
+        WallThickness=section["t"] / 1000.0,
+        Girth=section["flange"] / 1000.0,
+    )
+
+
+def create_chs_profile(model, section: dict[str, Any]):
+    return model.create_entity(
+        "IfcCircleHollowProfileDef",
+        ProfileName=section["name"],
+        ProfileType="AREA",
+        Radius=section["d"] / 2000.0,
+        WallThickness=section["t"] / 1000.0,
+    )
+
+
+def create_member_profile(model, section: dict[str, Any]):
+    profile = section.get("profile", "ub")
+
+    if profile == "z":
+        return create_z_shape_profile(model, section)
+
+    if profile == "c":
+        return create_c_shape_profile(model, section)
+
+    if profile == "chs":
+        return create_chs_profile(model, section)
+
+    return create_i_shape_profile(model, section)
+
+
+def member_placement_matrix(member: dict[str, Any], building_matrix: numpy.ndarray) -> numpy.ndarray:
+    return building_matrix @ member_axis_matrix(
+        member["start"],
+        member["end"],
+        member["role"],
+        orientation=member.get("orientation"),
     )
 
 
@@ -222,7 +351,7 @@ def create_steel_member(
     if object_type is not None:
         element.ObjectType = object_type
 
-    profile = create_i_shape_profile(model, section)
+    profile = create_member_profile(model, section)
     representation = ifcopenshell.api.geometry.add_profile_representation(
         model,
         context=body,
@@ -235,7 +364,7 @@ def create_steel_member(
         representation=representation,
     )
 
-    matrix = building_matrix @ member_axis_matrix(start, end, member["role"])
+    matrix = member_placement_matrix(member, building_matrix)
     ifcopenshell.api.geometry.edit_object_placement(
         model,
         product=element,
@@ -286,7 +415,56 @@ def create_haunch(
         representation=representation,
     )
 
-    matrix = building_matrix @ member_axis_matrix(start, end, member["role"])
+    matrix = member_placement_matrix(member, building_matrix)
+    ifcopenshell.api.geometry.edit_object_placement(
+        model,
+        product=element,
+        matrix=matrix,
+        is_si=True,
+    )
+
+    return element
+
+
+def create_ground_floor_slab(
+    model,
+    body,
+    slab: dict[str, Any],
+    building_matrix: numpy.ndarray,
+):
+    width = float(slab.get("width", 1.0))
+    length = float(slab.get("length", 1.0))
+    depth = float(slab.get("depth", 0.25))
+    slab_id = str(slab.get("id", "ground-floor-slab"))
+
+    element = ifcopenshell.api.root.create_entity(
+        model,
+        ifc_class="IfcSlab",
+        name=slab_id,
+        predefined_type="FLOOR",
+    )
+    element.ObjectType = "Ground floor slab"
+
+    profile = model.create_entity(
+        "IfcRectangleProfileDef",
+        ProfileName="Ground floor slab",
+        ProfileType="AREA",
+        XDim=width,
+        YDim=length,
+    )
+    representation = ifcopenshell.api.geometry.add_profile_representation(
+        model,
+        context=body,
+        profile=profile,
+        depth=depth,
+    )
+    ifcopenshell.api.geometry.assign_representation(
+        model,
+        product=element,
+        representation=representation,
+    )
+
+    matrix = building_matrix @ translation_matrix(0.0, length / 2.0, -depth)
     ifcopenshell.api.geometry.edit_object_placement(
         model,
         product=element,
@@ -307,19 +485,32 @@ def create_footing(
     width = float(footing.get("width", 1.5))
     depth = float(footing.get("depth", 1.5))
     height = float(footing.get("height", 0.5))
-    start = member["start"]
-    end = member["end"]
+    footing_type = footing.get("type", "reinforced_pad")
+    predefined_type = "PAD_FOOTING"
+    object_type = None
+
+    if footing_type == "pile_cap":
+        predefined_type = "PILE_CAP"
+        object_type = "Two-pile pile cap"
+    elif footing_type == "mass_filled":
+        predefined_type = "USERDEFINED"
+        object_type = "Mass-filled foundation"
+    elif footing_type == "reinforced_pad":
+        object_type = "Reinforced pad foundation"
 
     element = ifcopenshell.api.root.create_entity(
         model,
         ifc_class="IfcFooting",
         name=member["id"],
-        predefined_type="PAD_FOOTING",
+        predefined_type=predefined_type,
     )
+
+    if object_type is not None:
+        element.ObjectType = object_type
 
     profile = model.create_entity(
         "IfcRectangleProfileDef",
-        ProfileName="footing",
+        ProfileName=object_type or "Footing",
         ProfileType="AREA",
         XDim=width,
         YDim=depth,
@@ -336,7 +527,54 @@ def create_footing(
         representation=representation,
     )
 
-    matrix = building_matrix @ member_axis_matrix(start, end, member["role"])
+    matrix = member_placement_matrix(member, building_matrix)
+    ifcopenshell.api.geometry.edit_object_placement(
+        model,
+        product=element,
+        matrix=matrix,
+        is_si=True,
+    )
+
+    return element
+
+
+def create_pile(
+    model,
+    body,
+    member: dict[str, Any],
+    building_matrix: numpy.ndarray,
+):
+    pile = member.get("pile") or {}
+    diameter = float(pile.get("diameter", 0.45))
+    depth = float(pile.get("depth", 6.0))
+
+    element = ifcopenshell.api.root.create_entity(
+        model,
+        ifc_class="IfcPile",
+        name=member["id"],
+        predefined_type="BORED",
+    )
+    element.ObjectType = "Bored concrete pile"
+
+    profile = model.create_entity(
+        "IfcCircleProfileDef",
+        ProfileName="Pile",
+        ProfileType="AREA",
+        Radius=diameter / 2.0,
+    )
+    representation = ifcopenshell.api.geometry.add_profile_representation(
+        model,
+        context=body,
+        profile=profile,
+        depth=depth,
+    )
+    ifcopenshell.api.geometry.assign_representation(
+        model,
+        product=element,
+        representation=representation,
+    )
+
+    matrix = member_placement_matrix(member, building_matrix)
     ifcopenshell.api.geometry.edit_object_placement(
         model,
         product=element,
@@ -352,6 +590,7 @@ def export_portal_frame(payload: dict[str, Any]):
     rotation = payload.get("rotation", [0.0, 0.0, 0.0])
     members = payload.get("members", [])
     haunches = payload.get("haunches", [])
+    slab = payload.get("slab")
 
     model = ifcopenshell.api.project.create_file(version="IFC4")
     project = ifcopenshell.api.root.create_entity(model, ifc_class="IfcProject", name=name)
@@ -384,15 +623,37 @@ def export_portal_frame(payload: dict[str, Any]):
     building_matrix = building_placement_matrix(rotation)
     products = []
 
+    if slab is not None:
+        products.append(create_ground_floor_slab(model, body, slab, building_matrix))
+
     for member in members:
         role = member["role"]
 
-        if role == "column":
+        if role in {"column", "gable_column"}:
             products.append(create_steel_member(model, body, member, "IfcColumn", building_matrix))
-        elif role == "rafter":
-            products.append(create_steel_member(model, body, member, "IfcBeam", building_matrix))
+        elif role in {"rafter", "tie", "brace", "purlin", "side_rail"}:
+            object_type = None
+
+            if role == "purlin":
+                object_type = "Roof purlin"
+            elif role == "side_rail":
+                object_type = "Side rail"
+
+            products.append(
+                create_steel_member(
+                    model,
+                    body,
+                    member,
+                    "IfcBeam",
+                    building_matrix,
+                    object_type=object_type,
+                )
+            )
         elif role == "foundation":
-            products.append(create_footing(model, body, member, building_matrix))
+            if member.get("pile") is not None:
+                products.append(create_pile(model, body, member, building_matrix))
+            else:
+                products.append(create_footing(model, body, member, building_matrix))
 
     for haunch in haunches:
         products.append(create_haunch(model, body, haunch, building_matrix))

@@ -20,13 +20,22 @@ import {
     geocodeAddress,
     type GeocodedAddress,
 } from '@/lib/geocode-address';
-import { analyzePortalFrame, buildPortalFrame } from '@/lib/portal-frame';
+import {
+    analyzeGoverningPortalFrame,
+    buildPortalFrame,
+    calculatePortalFrameCarbon,
+    sizeFoundationReactions,
+    type CarbonQuantity,
+    type FoundationSizingResult,
+    type ScorsBand,
+} from '@/lib/portal-frame';
 import type { AnalyticalForceMode } from '@/lib/portal-frame/three-group';
 import {
     defaultBuildingDraft,
     portalFrameBounds,
 } from '@/types/custom-building';
 import type { ColumnRestraint } from '@/types/portal-frame';
+import type { FoundationType } from '@/types/portal-frame';
 import { rafterLineLoadKnM } from '@/types/portal-frame';
 
 const props = defineProps<{
@@ -46,6 +55,11 @@ const exportError = ref<string | null>(null);
 const frameError = ref<string | null>(null);
 const analyticalView = ref(false);
 const analyticalForceMode = ref<AnalyticalForceMode>('moment');
+const foundationTypeLabels: Record<FoundationType, string> = {
+    two_pile_cap: 'Two-pile pile cap',
+    reinforced_pad: 'Reinforced pad',
+    mass_filled: 'Mass-filled',
+};
 
 const baseReactions = computed(() => {
     if (!resolvedFrame.value) {
@@ -53,11 +67,101 @@ const baseReactions = computed(() => {
     }
 
     try {
-        return analyzePortalFrame(resolvedFrame.value).reactions;
+        return analyzeGoverningPortalFrame(
+            resolvedFrame.value,
+            draft.portalFrame,
+        ).reactions;
     } catch {
         return null;
     }
 });
+
+const foundationSizing = computed(() => {
+    if (!baseReactions.value) {
+        return null;
+    }
+
+    return sizeFoundationReactions(
+        baseReactions.value,
+        draft.portalFrame.foundation,
+    );
+});
+const foundationSizingEntries = computed(() => {
+    if (!foundationSizing.value) {
+        return [];
+    }
+
+    return [
+        { side: 'left', result: foundationSizing.value.left },
+        { side: 'right', result: foundationSizing.value.right },
+    ];
+});
+
+const carbon = computed(() => {
+    if (!resolvedFrame.value) {
+        return null;
+    }
+
+    try {
+        return calculatePortalFrameCarbon(draft.portalFrame);
+    } catch {
+        return null;
+    }
+});
+
+const carbonRows = computed<{ label: string; quantity: CarbonQuantity }[]>(() => {
+    if (!carbon.value) {
+        return [];
+    }
+
+    const { breakdown } = carbon.value;
+
+    return [
+        { label: 'Columns', quantity: breakdown.columns },
+        { label: 'Gable columns', quantity: breakdown.gableColumns },
+        { label: 'Rafters', quantity: breakdown.rafters },
+        { label: 'Haunches', quantity: breakdown.haunches },
+        { label: 'Eaves ties', quantity: breakdown.ties },
+        { label: 'Bracing', quantity: breakdown.braces },
+        { label: 'Side rails', quantity: breakdown.sideRails },
+        { label: 'Purlins', quantity: breakdown.purlins },
+        { label: 'Foundation concrete', quantity: breakdown.concrete },
+        { label: 'Foundation rebar', quantity: breakdown.rebar },
+        { label: 'Slab concrete', quantity: breakdown.slabConcrete },
+        { label: 'Slab rebar', quantity: breakdown.slabRebar },
+        { label: 'Connections', quantity: breakdown.connections },
+    ];
+});
+
+function formatCarbon(carbonKg: number): string {
+    if (carbonKg >= 1000) {
+        return `${(carbonKg / 1000).toLocaleString(undefined, {
+            maximumFractionDigits: 2,
+        })} tCO₂e`;
+    }
+
+    return `${carbonKg.toLocaleString(undefined, {
+        maximumFractionDigits: 0,
+    })} kgCO₂e`;
+}
+
+function carbonShare(carbonKg: number): number {
+    if (!carbon.value || carbon.value.totalCarbonKg <= 0) {
+        return 0;
+    }
+
+    return (carbonKg / carbon.value.totalCarbonKg) * 100;
+}
+
+const scorsBandClasses: Record<ScorsBand, string> = {
+    A: 'bg-green-600 text-white',
+    B: 'bg-green-500 text-white',
+    C: 'bg-lime-500 text-white',
+    D: 'bg-yellow-500 text-black',
+    E: 'bg-orange-500 text-white',
+    F: 'bg-red-500 text-white',
+    G: 'bg-red-700 text-white',
+};
 
 const teamSlug = computed(() => page.props.currentTeam?.slug ?? null);
 const placedBuildings = computed(() => props.map.customBuildings.value);
@@ -227,6 +331,20 @@ function updateColumnRestraint(event: Event): void {
     draft.portalFrame.columnRestraint = value;
     syncDraftToMap();
 }
+
+function updateFoundationType(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value as FoundationType;
+    draft.portalFrame.foundation.type = value;
+    syncDraftToMap();
+}
+
+function foundationResultStatus(result: FoundationSizingResult): string {
+    return result.checks.every((check) => check.passes) ? 'Pass' : 'Review';
+}
+
+function maximumUtilisation(result: FoundationSizingResult): number {
+    return Math.max(...result.checks.map((check) => check.utilisation));
+}
 </script>
 
 <template>
@@ -243,12 +361,107 @@ function updateColumnRestraint(event: Event): void {
             type="button"
             variant="secondary"
             size="sm"
-            class="absolute top-4 left-4 z-10 shadow-md lg:left-auto lg:right-[21.5rem]"
+            class="absolute top-4 left-1/2 z-10 -translate-x-1/2 shadow-md lg:left-auto lg:right-[21.5rem] lg:translate-x-0"
             @click="openMap(mapBuildingId ? { flyToId: mapBuildingId } : undefined)"
         >
             <Map class="size-4" />
             View map
         </Button>
+
+        <aside
+            v-if="carbon"
+            class="absolute top-4 left-4 z-20 flex max-h-[calc(100%-2rem)] w-72 flex-col overflow-hidden rounded-xl border border-sidebar-border/70 bg-background/90 shadow-2xl backdrop-blur-md sm:w-80"
+        >
+            <Card class="flex min-h-0 flex-1 flex-col gap-0 border-0 bg-transparent py-0 shadow-none">
+                <CardHeader class="shrink-0 border-b border-sidebar-border/70 py-4">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <CardTitle>Embodied carbon</CardTitle>
+                            <CardDescription>
+                                A1–A3 estimate from element mass × factor.
+                                Includes a 250mm slab with H12 top and bottom at
+                                200mm centres, plus 10% steel for connections.
+                            </CardDescription>
+                        </div>
+                        <span
+                            class="flex size-9 shrink-0 items-center justify-center rounded-md text-base font-bold"
+                            :class="scorsBandClasses[carbon.scorsBand]"
+                            :title="`IStructE SCORS band ${carbon.scorsBand}`"
+                        >
+                            {{ carbon.scorsBand }}
+                        </span>
+                    </div>
+                </CardHeader>
+
+                <CardContent
+                    class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4 text-sm"
+                >
+                    <div class="grid grid-cols-2 gap-3">
+                        <div
+                            class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2"
+                        >
+                            <p class="text-xs text-muted-foreground">Total</p>
+                            <p class="font-semibold">
+                                {{ formatCarbon(carbon.totalCarbonKg) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2"
+                        >
+                            <p class="text-xs text-muted-foreground">Intensity</p>
+                            <p class="font-semibold">
+                                {{ carbon.carbonIntensityKgM2.toFixed(0) }}
+                                kgCO₂e/m²
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                over {{ carbon.floorAreaM2.toFixed(0) }} m² GIFA
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <div
+                            v-for="row in carbonRows"
+                            :key="row.label"
+                            class="grid grid-cols-[1fr_auto] items-center gap-x-3"
+                        >
+                            <div class="flex items-center justify-between gap-2">
+                                <span>{{ row.label }}</span>
+                                <span class="text-xs text-muted-foreground">
+                                    {{
+                                        carbonShare(row.quantity.carbonKg).toFixed(0)
+                                    }}%
+                                </span>
+                            </div>
+                            <span class="text-right tabular-nums">
+                                {{ formatCarbon(row.quantity.carbonKg) }}
+                            </span>
+                            <div
+                                class="col-span-2 h-1 overflow-hidden rounded-full bg-background/70"
+                            >
+                                <div
+                                    class="h-full rounded-full bg-primary/60"
+                                    :style="{
+                                        width: `${carbonShare(row.quantity.carbonKg)}%`,
+                                    }"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        class="flex items-center justify-between gap-2 border-t border-sidebar-border/70 pt-2"
+                    >
+                        <span class="text-muted-foreground">
+                            Steel sections subtotal
+                        </span>
+                        <span class="tabular-nums">
+                            {{ formatCarbon(carbon.steelSectionsCarbonKg) }}
+                        </span>
+                    </div>
+                </CardContent>
+            </Card>
+        </aside>
 
         <aside
             class="absolute top-4 right-4 z-20 flex max-h-[calc(100%-2rem)] w-72 flex-col overflow-hidden rounded-xl border border-sidebar-border/70 bg-background/90 shadow-2xl backdrop-blur-md sm:w-80"
@@ -402,6 +615,264 @@ function updateColumnRestraint(event: Event): void {
                         >
                             Axial
                         </Button>
+                    </div>
+
+                    <div class="grid gap-2">
+                        <Label for="foundation-type">Foundation type</Label>
+                        <select
+                            id="foundation-type"
+                            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                            :value="draft.portalFrame.foundation.type"
+                            @change="updateFoundationType"
+                        >
+                            <option value="two_pile_cap">
+                                Two-pile pile cap
+                            </option>
+                            <option value="reinforced_pad">
+                                Pad foundation with reinforcement
+                            </option>
+                            <option value="mass_filled">
+                                Mass-filled foundation
+                            </option>
+                        </select>
+                    </div>
+
+                    <details
+                        class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-sm"
+                    >
+                        <summary class="cursor-pointer font-medium">
+                            Foundation assumptions
+                        </summary>
+                        <div class="mt-3 grid grid-cols-2 gap-3">
+                            <div class="grid gap-2">
+                                <Label for="allowable-bearing">
+                                    Bearing (kPa)
+                                </Label>
+                                <Input
+                                    id="allowable-bearing"
+                                    v-model.number="
+                                        draft.portalFrame.foundation.assumptions
+                                            .allowableBearingKpa
+                                    "
+                                    type="number"
+                                    min="1"
+                                    step="5"
+                                    @change="syncDraftToMap"
+                                />
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="pile-capacity">
+                                    Pile capacity (kN)
+                                </Label>
+                                <Input
+                                    id="pile-capacity"
+                                    v-model.number="
+                                        draft.portalFrame.foundation.assumptions
+                                            .pileWorkingCapacityKn
+                                    "
+                                    type="number"
+                                    min="1"
+                                    step="10"
+                                    @change="syncDraftToMap"
+                                />
+                            </div>
+                            <div
+                                v-if="
+                                    draft.portalFrame.foundation.type ===
+                                    'two_pile_cap'
+                                "
+                                class="col-span-2 rounded-md border border-sidebar-border/70 bg-background/50 p-2 text-xs text-muted-foreground"
+                            >
+                                Two-pile caps use two 450 mm diameter piles,
+                                6.0 m deep, spaced at 3D = 1.35 m
+                                centre-to-centre.
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="concrete-density">
+                                    Concrete (kN/m³)
+                                </Label>
+                                <Input
+                                    id="concrete-density"
+                                    v-model.number="
+                                        draft.portalFrame.foundation.assumptions
+                                            .concreteDensityKnM3
+                                    "
+                                    type="number"
+                                    min="1"
+                                    step="0.5"
+                                    @change="syncDraftToMap"
+                                />
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="soil-density">
+                                    Soil cover (kN/m³)
+                                </Label>
+                                <Input
+                                    id="soil-density"
+                                    v-model.number="
+                                        draft.portalFrame.foundation.assumptions
+                                            .soilCoverDensityKnM3
+                                    "
+                                    type="number"
+                                    min="1"
+                                    step="0.5"
+                                    @change="syncDraftToMap"
+                                />
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="friction">
+                                    Friction coefficient
+                                </Label>
+                                <Input
+                                    id="friction"
+                                    v-model.number="
+                                        draft.portalFrame.foundation.assumptions
+                                            .frictionCoefficient
+                                    "
+                                    type="number"
+                                    min="0.05"
+                                    step="0.05"
+                                    @change="syncDraftToMap"
+                                />
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="concrete-cover">
+                                    Cover (m)
+                                </Label>
+                                <Input
+                                    id="concrete-cover"
+                                    v-model.number="
+                                        draft.portalFrame.foundation.assumptions
+                                            .concreteCoverM
+                                    "
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    @change="syncDraftToMap"
+                                />
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="bar-diameter">
+                                    Bar dia. (mm)
+                                </Label>
+                                <Input
+                                    id="bar-diameter"
+                                    v-model.number="
+                                        draft.portalFrame.foundation.assumptions
+                                            .preferredBarDiameterMm
+                                    "
+                                    type="number"
+                                    min="6"
+                                    step="2"
+                                    @change="syncDraftToMap"
+                                />
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="rebar-yield">
+                                    Rebar fy (MPa)
+                                </Label>
+                                <Input
+                                    id="rebar-yield"
+                                    v-model.number="
+                                        draft.portalFrame.foundation.assumptions
+                                            .reinforcementYieldStrengthMpa
+                                    "
+                                    type="number"
+                                    min="1"
+                                    step="10"
+                                    @change="syncDraftToMap"
+                                />
+                            </div>
+                        </div>
+                    </details>
+
+                    <div
+                        v-if="foundationSizing"
+                        class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-sm"
+                    >
+                        <p class="font-medium">
+                            {{
+                                foundationTypeLabels[
+                                    draft.portalFrame.foundation.type
+                                ]
+                            }}
+                            sizing
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Preliminary sizing from base reactions. Confirm with
+                            project geotechnical and code checks.
+                        </p>
+                        <div class="mt-3 grid gap-3">
+                            <div
+                                v-for="{ side, result } in foundationSizingEntries"
+                                :key="side"
+                                class="rounded-md border border-sidebar-border/70 bg-background/50 p-2"
+                            >
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="font-medium capitalize">
+                                        {{ side }} base
+                                    </p>
+                                    <span
+                                        :class="
+                                            result.checks.every(
+                                                (check) => check.passes,
+                                            )
+                                                ? 'text-green-600'
+                                                : 'text-destructive'
+                                        "
+                                    >
+                                        {{ foundationResultStatus(result) }}
+                                        ({{
+                                            maximumUtilisation(result).toFixed(2)
+                                        }})
+                                    </span>
+                                </div>
+                                <p class="mt-1">
+                                    {{ result.dimensions.widthM.toFixed(2) }}m ×
+                                    {{ result.dimensions.depthM.toFixed(2) }}m ×
+                                    {{ result.dimensions.heightM.toFixed(2) }}m
+                                </p>
+                                <p v-if="result.reinforcement" class="mt-1">
+                                    Rebar:
+                                    T{{
+                                        result.reinforcement.barDiameterMm.toFixed(0)
+                                    }}
+                                    @
+                                    {{
+                                        result.reinforcement.spacingMm.toFixed(0)
+                                    }}mm each way
+                                </p>
+                                <p v-if="result.pileCap" class="mt-1">
+                                    Piles:
+                                    {{ result.pileCap.pileCount }} ×
+                                    {{
+                                        (
+                                            result.pileCap.pileDiameterM * 1000
+                                        ).toFixed(0)
+                                    }}mm Ø ×
+                                    {{ result.pileCap.pileDepthM.toFixed(1) }}m
+                                    deep,
+                                    {{ result.pileCap.pileSpacingM.toFixed(2) }}m c/c,
+                                    {{
+                                        result.pileCap.pileCompressionKn.toFixed(1)
+                                    }}kN max
+                                </p>
+                                <ul class="mt-2 space-y-1 text-xs">
+                                    <li
+                                        v-for="check in result.checks"
+                                        :key="check.label"
+                                        class="flex justify-between gap-2"
+                                    >
+                                        <span>{{ check.label }}</span>
+                                        <span>
+                                            {{ check.demand.toFixed(1) }} /
+                                            {{ check.capacity.toFixed(1) }}
+                                            {{ check.unit }}
+                                        </span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
 
                     <div

@@ -1,18 +1,20 @@
-import { Group, Line, Mesh } from 'three';
+import { Group, Line, Mesh, Sprite } from 'three';
 import {
     buildPortalFrame,
     portalFrameApexHeight,
     portalFrameCenter,
 } from '@/lib/portal-frame/geometry-builder';
+import { createColumnGridGroup } from '@/lib/portal-frame/column-grid';
 import { createPortalFrameGroup } from '@/lib/portal-frame/i-shape-geometry';
 import { createEavesHaunches } from '@/lib/portal-frame/haunch-geometry';
+import { adjustMembersForAnalysis } from '@/lib/portal-frame/analytical-adjustments';
 import { adjustMembersForRendering } from '@/lib/portal-frame/render-adjustments';
 import { createStickAnalysisGroup } from '@/lib/portal-frame/stick-model';
 import {
     createForceDiagramGroup,
     type AnalyticalForceMode,
 } from '@/lib/portal-frame/force-diagram-3d';
-import { analyzePortalFrame } from '@/lib/portal-frame/frame-analysis';
+import { createGroundFloorSlabMesh } from '@/lib/portal-frame/ground-floor-slab';
 import type { PortalFrameDesign } from '@/types/portal-frame';
 
 export type PortalFrameViewMode = 'solid' | 'analytical';
@@ -29,6 +31,11 @@ function disposeObject3D(object: Group): void {
                 child.material.dispose();
             }
         }
+
+        if (child instanceof Sprite) {
+            child.material.map?.dispose();
+            child.material.dispose();
+        }
     });
 }
 
@@ -41,20 +48,30 @@ export function buildPortalFrameThreeGroup(
     const group = new Group();
 
     if (viewMode === 'analytical') {
-        group.add(createStickAnalysisGroup(built.members));
-        const analysis = analyzePortalFrame(built);
-        group.add(createForceDiagramGroup(built.members, analysis.members, forceMode));
+        const analysisMembers = adjustMembersForAnalysis(built.members, design);
+        group.add(createStickAnalysisGroup(analysisMembers));
+        group.add(createForceDiagramGroup(built.members, built, design, forceMode));
     } else {
         const renderMembers = adjustMembersForRendering(built.members);
+        group.add(createGroundFloorSlabMesh(design));
         createPortalFrameGroup(renderMembers).forEach((mesh) => group.add(mesh));
         createEavesHaunches(built.members, renderMembers).forEach((mesh) =>
             group.add(mesh),
         );
     }
 
+    addColumnGridSafely(group, design);
     group.position.set(0, -design.buildingLength / 2, 0);
 
     return group;
+}
+
+function addColumnGridSafely(group: Group, design: PortalFrameDesign): void {
+    try {
+        group.add(createColumnGridGroup(design));
+    } catch {
+        // Grid labels need a browser canvas; never fail the structural preview.
+    }
 }
 
 export function replacePortalFrameThreeGroup(

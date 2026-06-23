@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildPortalFrame } from '@/lib/portal-frame/geometry-builder';
-import { analyzePortalFrame } from '@/lib/portal-frame/frame-analysis';
+import {
+    analyzeGoverningPortalFrame,
+    analyzePortalFrame,
+} from '@/lib/portal-frame/frame-analysis';
 import { memberLengthM } from '@/lib/portal-frame/member-basis';
 import { findUbSection } from '@/lib/portal-frame/ub-sections';
-import { defaultPortalFrameDesign } from '@/types/portal-frame';
+import {
+    defaultPortalFrameDesign,
+    rafterLineLoadKnMForFrame,
+} from '@/types/portal-frame';
 
 describe('findUbSection', () => {
     it('parses major-axis inertia and area from CSV', () => {
@@ -15,17 +21,18 @@ describe('findUbSection', () => {
 });
 
 describe('analyzePortalFrame', () => {
-    it('satisfies vertical equilibrium for the default frame', () => {
+    it('satisfies vertical equilibrium for the default interior frame', () => {
         const design = defaultPortalFrameDesign();
         const built = buildPortalFrame(design);
-        const result = analyzePortalFrame(built);
+        const result = analyzeGoverningPortalFrame(built, design);
 
         const rafters = built.members.filter(
             (member) =>
-                member.id.startsWith('frame-0-') && member.role === 'rafter',
+                member.id.startsWith('frame-1-') && member.role === 'rafter',
         );
+        const lineLoadKnM = rafterLineLoadKnMForFrame(design, 1);
         const totalAppliedVerticalKn = rafters.reduce(
-            (sum, rafter) => sum + built.rafterLineLoadKnM * memberLengthM(rafter),
+            (sum, rafter) => sum + lineLoadKnM * memberLengthM(rafter),
             0,
         );
         const totalReactionVerticalKn =
@@ -35,15 +42,20 @@ describe('analyzePortalFrame', () => {
     });
 
     it('produces symmetric reactions for the default symmetric frame', () => {
-        const built = buildPortalFrame(defaultPortalFrameDesign());
-        const result = analyzePortalFrame(built);
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
+        const result = analyzeGoverningPortalFrame(built, design);
 
         expect(result.reactions.left.fzKn).toBeCloseTo(result.reactions.right.fzKn, 1);
         expect(result.reactions.left.fxKn).toBeCloseTo(-result.reactions.right.fxKn, 1);
     });
 
     it('returns non-zero bending in rafters and columns', () => {
-        const result = analyzePortalFrame(buildPortalFrame(defaultPortalFrameDesign()));
+        const design = defaultPortalFrameDesign();
+        const result = analyzeGoverningPortalFrame(
+            buildPortalFrame(design),
+            design,
+        );
 
         for (const member of result.members) {
             const maxMoment = Math.max(...member.momentKnm.map(Math.abs));
@@ -55,7 +67,11 @@ describe('analyzePortalFrame', () => {
     });
 
     it('has zero bending moment at the pinned bases', () => {
-        const result = analyzePortalFrame(buildPortalFrame(defaultPortalFrameDesign()));
+        const design = defaultPortalFrameDesign();
+        const result = analyzeGoverningPortalFrame(
+            buildPortalFrame(design),
+            design,
+        );
         const columns = result.members.filter((member) => member.role === 'column');
 
         for (const column of columns) {
@@ -69,14 +85,18 @@ describe('analyzePortalFrame', () => {
     });
 
     it('maintains moment continuity at the eaves moment connections', () => {
-        const result = analyzePortalFrame(buildPortalFrame(defaultPortalFrameDesign()));
+        const design = defaultPortalFrameDesign();
+        const result = analyzeGoverningPortalFrame(
+            buildPortalFrame(design),
+            design,
+        );
 
         for (const side of ['left', 'right'] as const) {
             const column = result.members.find(
-                (member) => member.id === `frame-0-column-${side}`,
+                (member) => member.id === `frame-1-column-${side}`,
             );
             const rafter = result.members.find(
-                (member) => member.id === `frame-0-rafter-${side}`,
+                (member) => member.id === `frame-1-rafter-${side}`,
             );
 
             const columnTopMoment = column!.momentKnm[column!.momentKnm.length - 1];
@@ -94,12 +114,16 @@ describe('analyzePortalFrame', () => {
     });
 
     it('maintains moment continuity at the apex moment connection', () => {
-        const result = analyzePortalFrame(buildPortalFrame(defaultPortalFrameDesign()));
+        const design = defaultPortalFrameDesign();
+        const result = analyzeGoverningPortalFrame(
+            buildPortalFrame(design),
+            design,
+        );
         const leftRafter = result.members.find(
-            (member) => member.id === 'frame-0-rafter-left',
+            (member) => member.id === 'frame-1-rafter-left',
         );
         const rightRafter = result.members.find(
-            (member) => member.id === 'frame-0-rafter-right',
+            (member) => member.id === 'frame-1-rafter-right',
         );
 
         const leftApexMoment = leftRafter!.momentKnm[leftRafter!.momentKnm.length - 1];
@@ -111,14 +135,18 @@ describe('analyzePortalFrame', () => {
     });
 
     it('produces the largest bending moment at the eaves, not the apex', () => {
-        const result = analyzePortalFrame(buildPortalFrame(defaultPortalFrameDesign()));
+        const design = defaultPortalFrameDesign();
+        const result = analyzeGoverningPortalFrame(
+            buildPortalFrame(design),
+            design,
+        );
 
         for (const side of ['left', 'right'] as const) {
             const column = result.members.find(
-                (member) => member.id === `frame-0-column-${side}`,
+                (member) => member.id === `frame-1-column-${side}`,
             );
             const rafter = result.members.find(
-                (member) => member.id === `frame-0-rafter-${side}`,
+                (member) => member.id === `frame-1-rafter-${side}`,
             );
 
             // Eaves moment = column top = rafter start.
@@ -143,16 +171,18 @@ describe('analyzePortalFrame', () => {
     });
 
     it('satisfies global equilibrium of base reactions', () => {
-        const built = buildPortalFrame(defaultPortalFrameDesign());
-        const result = analyzePortalFrame(built);
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
+        const result = analyzeGoverningPortalFrame(built, design);
         const { left, right } = result.reactions;
 
         const rafters = built.members.filter(
             (member) =>
-                member.id.startsWith('frame-0-') && member.role === 'rafter',
+                member.id.startsWith('frame-1-') && member.role === 'rafter',
         );
+        const lineLoadKnM = rafterLineLoadKnMForFrame(design, 1);
         const totalAppliedVerticalKn = rafters.reduce(
-            (sum, rafter) => sum + built.rafterLineLoadKnM * memberLengthM(rafter),
+            (sum, rafter) => sum + lineLoadKnM * memberLengthM(rafter),
             0,
         );
 
@@ -163,10 +193,11 @@ describe('analyzePortalFrame', () => {
     });
 
     it('relates column base axial force to the vertical base reaction', () => {
-        const built = buildPortalFrame(defaultPortalFrameDesign());
-        const result = analyzePortalFrame(built);
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
+        const result = analyzeGoverningPortalFrame(built, design);
         const leftColumn = result.members.find(
-            (member) => member.id === 'frame-0-column-left',
+            (member) => member.id === 'frame-1-column-left',
         );
 
         // The column is vertical, so its axial force at the base equals the
@@ -219,12 +250,41 @@ describe('analyzePortalFrame', () => {
             ],
         };
 
-        const lightResult = analyzePortalFrame(lightBuilt);
-        const heavyResult = analyzePortalFrame(heavyBuilt);
+        const lightResult = analyzePortalFrame(lightBuilt, {
+            frameIndex: 0,
+            lineLoadKnM: built.rafterLineLoadKnM,
+        });
+        const heavyResult = analyzePortalFrame(heavyBuilt, {
+            frameIndex: 0,
+            lineLoadKnM: built.rafterLineLoadKnM,
+        });
 
         expect(lightResult.apexHorizontalDisplacementM).toBeCloseTo(0, 3);
         expect(Math.abs(heavyResult.apexVerticalDisplacementM)).toBeLessThan(
             Math.abs(lightResult.apexVerticalDisplacementM),
         );
+    });
+
+    it('gives gable end frames half the eaves moment of interior frames', () => {
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
+        const gableResult = analyzePortalFrame(built, {
+            frameIndex: 0,
+            lineLoadKnM: rafterLineLoadKnMForFrame(design, 0),
+        });
+        const interiorResult = analyzeGoverningPortalFrame(built, design);
+        const gableEavesMoment = Math.abs(
+            gableResult.members.find((member) => member.id === 'frame-0-column-left')!
+                .momentKnm.at(-1)!,
+        );
+        const interiorEavesMoment = Math.abs(
+            interiorResult.members.find((member) => member.id === 'frame-1-column-left')!
+                .momentKnm.at(-1)!,
+        );
+
+        expect(rafterLineLoadKnMForFrame(design, 0)).toBe(
+            rafterLineLoadKnMForFrame(design, 1) / 2,
+        );
+        expect(gableEavesMoment).toBeCloseTo(interiorEavesMoment / 2, 1);
     });
 });

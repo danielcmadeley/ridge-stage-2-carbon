@@ -3,6 +3,7 @@
 namespace App\Services\PortalFrame;
 
 use App\Data\FrameMember;
+use App\Data\UbSection;
 
 class PortalFrameRenderAdjustments
 {
@@ -66,39 +67,70 @@ class PortalFrameRenderAdjustments
 
     public function trimRafterAtColumnFace(FrameMember $rafter, FrameMember $column): FrameMember
     {
+        return $this->trimMemberAtColumnFace($rafter, $column, 'start');
+    }
+
+    /**
+     * @param  'start'|'end'  $end
+     */
+    private function trimMemberAtColumnFace(
+        FrameMember $member,
+        FrameMember $column,
+        string $end,
+    ): FrameMember {
+        if (! $column->section instanceof UbSection || ! $member->section instanceof UbSection) {
+            return $member;
+        }
+
         $columnX = $column->start[0];
         $halfFlangeWidthM = $column->section->b / 2000;
         $innerFaceX = $columnX + ($this->inwardSign($columnX) * $halfFlangeWidthM);
 
-        $start = $rafter->start;
-        $end = $rafter->end;
-        $deltaX = $end[0] - $start[0];
+        $start = $member->start;
+        $endPoint = $member->end;
+        $deltaX = $endPoint[0] - $start[0];
 
         if (abs($deltaX) < self::POSITION_TOLERANCE) {
-            return $rafter;
+            return $member;
         }
 
         $trimFraction = ($innerFaceX - $start[0]) / $deltaX;
 
         if ($trimFraction <= 0 || $trimFraction >= 1) {
-            return $rafter;
+            return $member;
+        }
+
+        $trimmedPoint = [
+            $start[0] + ($trimFraction * ($endPoint[0] - $start[0])),
+            $start[1] + ($trimFraction * ($endPoint[1] - $start[1])),
+            $start[2] + ($trimFraction * ($endPoint[2] - $start[2])),
+        ];
+
+        if ($end === 'start') {
+            return new FrameMember(
+                id: $member->id,
+                role: $member->role,
+                start: $trimmedPoint,
+                end: $member->end,
+                section: $member->section,
+            );
         }
 
         return new FrameMember(
-            id: $rafter->id,
-            role: $rafter->role,
-            start: [
-                $start[0] + ($trimFraction * ($end[0] - $start[0])),
-                $start[1] + ($trimFraction * ($end[1] - $start[1])),
-                $start[2] + ($trimFraction * ($end[2] - $start[2])),
-            ],
-            end: $rafter->end,
-            section: $rafter->section,
+            id: $member->id,
+            role: $member->role,
+            start: $member->start,
+            end: $trimmedPoint,
+            section: $member->section,
         );
     }
 
     public function extendColumnToRafterTop(FrameMember $column, FrameMember $rafter): FrameMember
     {
+        if (! $column->section instanceof UbSection || ! $rafter->section instanceof UbSection) {
+            return $column;
+        }
+
         $basis = MemberBasis::fromMember($rafter);
         $halfRafterDepthM = $rafter->section->h / 2000;
         $verticalExtension = $basis->majorAxis[2] * $halfRafterDepthM;

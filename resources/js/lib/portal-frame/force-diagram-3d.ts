@@ -15,11 +15,21 @@ import {
 } from '@/lib/portal-frame/force-diagram-hover';
 import type { MemberAnalysisResult } from '@/lib/portal-frame/frame-analysis';
 import {
+    analyzePortalFrame,
+    type FrameAnalysisResult,
+} from '@/lib/portal-frame/frame-analysis';
+import {
     forceDiagramScale,
     memberLineFromPoints,
 } from '@/lib/portal-frame/force-diagram-geometry';
 import { memberBasis } from '@/lib/portal-frame/member-basis';
-import type { FrameMember } from '@/types/portal-frame';
+import type { BuiltPortalFrame } from '@/lib/portal-frame/geometry-builder';
+import type { FrameMember, PortalFrameDesign } from '@/types/portal-frame';
+import {
+    isGableEndFrame,
+    rafterLineLoadKnMForFrame,
+    representativeInteriorFrameIndex,
+} from '@/types/portal-frame';
 
 export type AnalyticalForceMode = 'shear' | 'moment' | 'axial';
 
@@ -33,6 +43,44 @@ function memberAnalysisKey(memberId: string): string {
     const match = memberId.match(/^frame-\d+-(.+)$/);
 
     return match ? match[1] : memberId;
+}
+
+function frameIndexFromMemberId(memberId: string): number | null {
+    const match = memberId.match(/^frame-(\d+)-/);
+
+    return match ? Number(match[1]) : null;
+}
+
+function buildAnalysisByMemberKey(
+    analysis: FrameAnalysisResult,
+): Map<string, MemberAnalysisResult> {
+    return new Map(
+        analysis.members.map((member) => [memberAnalysisKey(member.id), member]),
+    );
+}
+
+function buildVisualizationAnalyses(
+    built: BuiltPortalFrame,
+    design: PortalFrameDesign,
+): {
+    gable: Map<string, MemberAnalysisResult>;
+    interior: Map<string, MemberAnalysisResult>;
+} {
+    const gableFrameIndex = 0;
+    const interiorFrameIndex = representativeInteriorFrameIndex(design);
+    const gableAnalysis = analyzePortalFrame(built, {
+        frameIndex: gableFrameIndex,
+        lineLoadKnM: rafterLineLoadKnMForFrame(design, gableFrameIndex),
+    });
+    const interiorAnalysis = analyzePortalFrame(built, {
+        frameIndex: interiorFrameIndex,
+        lineLoadKnM: rafterLineLoadKnMForFrame(design, interiorFrameIndex),
+    });
+
+    return {
+        gable: buildAnalysisByMemberKey(gableAnalysis),
+        interior: buildAnalysisByMemberKey(interiorAnalysis),
+    };
 }
 
 function centrelinePointAtStation(
@@ -79,6 +127,14 @@ function offsetPointAtStation(
     return centre.add(offset);
 }
 
+function diagramNormal(member: FrameMember, mode: AnalyticalForceMode): Vector3 {
+    if (mode === 'moment') {
+        return momentDiagramNormal(member);
+    }
+
+    return memberBasis(member).majorAxis;
+}
+
 function attachForceDiagramHoverData(
     object: Line | Mesh,
     member: FrameMember,
@@ -92,39 +148,6 @@ function attachForceDiagramHoverData(
     };
 
     object.userData[FORCE_DIAGRAM_HOVER_KEY] = hoverData;
-}
-
-function createDiagramLine(
-    member: FrameMember,
-    normal: Vector3,
-    stationsM: number[],
-    values: number[],
-    scale: number,
-    color: string,
-    analysis: MemberAnalysisResult,
-    mode: AnalyticalForceMode,
-): Line {
-    const positions: number[] = [];
-
-    for (let index = 0; index < stationsM.length; index++) {
-        const point = offsetPointAtStation(
-            member,
-            normal,
-            stationsM[index],
-            values[index],
-            scale,
-            1,
-        );
-        positions.push(point.x, point.y, point.z);
-    }
-
-    const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
-
-    const line = new Line(geometry, new LineBasicMaterial({ color }));
-    attachForceDiagramHoverData(line, member, analysis, mode);
-
-    return line;
 }
 
 function createFillMesh(
@@ -216,15 +239,38 @@ function createOutlineLine(
 
 export function createForceDiagramGroup(
     members: FrameMember[],
-    analysisMembers: MemberAnalysisResult[],
+    built: BuiltPortalFrame,
+    design: PortalFrameDesign,
     mode: AnalyticalForceMode,
 ): Group {
     const group = new Group();
-    const analysisByKey = new Map(
-        analysisMembers.map((member) => [memberAnalysisKey(member.id), member]),
-    );
+    const { gable: gableAnalysisByKey, interior: interiorAnalysisByKey } =
+        buildVisualizationAnalyses(built, design);
 
-    const valuesFor = (member: MemberAnalysisResult): number[] => {
+    const analysisForMember = (member: FrameMember): MemberAnalysisResult | undefined => {
+        const frameIndex = frameIndexFromMemberId(member.id);
+
+        if (frameIndex === null) {
+            return undefined;
+        }
+
+        const analysisByKey = isGableEndFrame(frameIndex, design)
+            ? gableAnalysisByKey
+            : interiorAnalysisByKey;
+
+        return analysisByKey.get(memberAnalysisKey(member.id));
+    };
+
+    const structuralMembers = members.filter(
+        (member) => member.role === 'column' || member.role === 'rafter',
+    );
+    const resolvedAnalyses = structuralMembers
+        .map((member) => analysisForMember(member))
+        .filter((analysis): analysis is MemberAnalysisResult => analysis !== undefined);
+    const frameZeroLines = resolvedAnalyses.map((member) =>
+        memberLineFromPoints(member.start, member.end),
+    );
+    const valuesByMember = resolvedAnalyses.map((member) => {
         if (mode === 'shear') {
             return member.shearKn;
         }
@@ -234,71 +280,49 @@ export function createForceDiagramGroup(
         }
 
         return member.momentKnm;
-    };
-
-    const frameZeroLines = analysisMembers.map((member) =>
-        memberLineFromPoints(member.start, member.end),
-    );
-    const valuesByMember = analysisMembers.map((member) => valuesFor(member));
+    });
     const scale = forceDiagramScale(frameZeroLines, valuesByMember);
     const color = FORCE_DIAGRAM_COLOR[mode];
 
-    const structuralMembers = members.filter(
-        (member) => member.role === 'column' || member.role === 'rafter',
-    );
-
     for (const member of structuralMembers) {
-        const analysis = analysisByKey.get(memberAnalysisKey(member.id));
+        const analysis = analysisForMember(member);
 
         if (!analysis) {
             continue;
         }
 
-        const values = valuesFor(analysis);
+        const values =
+            mode === 'shear'
+                ? analysis.shearKn
+                : mode === 'axial'
+                  ? analysis.axialKn
+                  : analysis.momentKnm;
+        const normal = diagramNormal(member, mode);
 
-        if (mode === 'moment') {
-            // Plot on the tension side so left/right members mirror rather than
-            // invert: peak hogging at both eaves, sagging at the apex.
-            const normal = momentDiagramNormal(member);
-            group.add(
-                createFillMesh(
-                    member,
-                    normal,
-                    analysis.stationsM,
-                    values,
-                    scale,
-                    color,
-                    analysis,
-                    mode,
-                ),
-            );
-            group.add(
-                createOutlineLine(
-                    member,
-                    normal,
-                    analysis.stationsM,
-                    values,
-                    scale,
-                    color,
-                    analysis,
-                    mode,
-                ),
-            );
-        } else {
-            const normal = memberBasis(member).majorAxis;
-            group.add(
-                createDiagramLine(
-                    member,
-                    normal,
-                    analysis.stationsM,
-                    values,
-                    scale,
-                    color,
-                    analysis,
-                    mode,
-                ),
-            );
-        }
+        group.add(
+            createFillMesh(
+                member,
+                normal,
+                analysis.stationsM,
+                values,
+                scale,
+                color,
+                analysis,
+                mode,
+            ),
+        );
+        group.add(
+            createOutlineLine(
+                member,
+                normal,
+                analysis.stationsM,
+                values,
+                scale,
+                color,
+                analysis,
+                mode,
+            ),
+        );
     }
 
     return group;

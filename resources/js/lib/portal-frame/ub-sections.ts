@@ -25,6 +25,7 @@ function parseUbSections(csv: string): Map<string, UbSectionDimensions> {
         }
 
         const section: UbSectionDimensions = {
+            profile: 'ub',
             name: row[0],
             h: Number(row[1]),
             b: Number(row[2]),
@@ -32,6 +33,7 @@ function parseUbSections(csv: string): Map<string, UbSectionDimensions> {
             tf: Number(row[4]),
             areaCm2: Number(row[8]),
             iyCm4: Number(row[9]),
+            massPerMKg: Number(row[45]),
         };
 
         sections.set(normalizeDesignation(section.name), section);
