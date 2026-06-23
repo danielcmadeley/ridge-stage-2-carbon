@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
-import { Map, Search, Download } from '@lucide/vue';
+import { Map, Search, Download, FileText } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import BuildingPreview from '@/components/BuildingPreview.vue';
+import TypstPdfPreviewDialog from '@/components/TypstPdfPreviewDialog.vue';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -16,6 +17,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { UseUkMap3dReturn } from '@/composables/useUkMap3d';
+import { useTypstPdfExport } from '@/composables/useTypstPdfExport';
+import {
+    buildCarbonReportTypstSource,
+    CARBON_REPORT_ROWS,
+} from '@/lib/typst-carbon-report';
 import {
     geocodeAddress,
     type GeocodedAddress,
@@ -116,22 +122,38 @@ const carbonRows = computed<{ label: string; quantity: CarbonQuantity }[]>(() =>
 
     const { breakdown } = carbon.value;
 
-    return [
-        { label: 'Columns', quantity: breakdown.columns },
-        { label: 'Gable columns', quantity: breakdown.gableColumns },
-        { label: 'Rafters', quantity: breakdown.rafters },
-        { label: 'Haunches', quantity: breakdown.haunches },
-        { label: 'Eaves ties', quantity: breakdown.ties },
-        { label: 'Bracing', quantity: breakdown.braces },
-        { label: 'Side rails', quantity: breakdown.sideRails },
-        { label: 'Purlins', quantity: breakdown.purlins },
-        { label: 'Foundation concrete', quantity: breakdown.concrete },
-        { label: 'Foundation rebar', quantity: breakdown.rebar },
-        { label: 'Slab concrete', quantity: breakdown.slabConcrete },
-        { label: 'Slab rebar', quantity: breakdown.slabRebar },
-        { label: 'Connections', quantity: breakdown.connections },
-    ];
+    return CARBON_REPORT_ROWS.map(({ label, key }) => ({
+        label,
+        quantity: breakdown[key],
+    }));
 });
+
+const carbonReportExport = useTypstPdfExport({
+    buildSource: (paperSize) => {
+        if (!carbon.value || !resolvedFrame.value) {
+            throw new Error('Carbon data is not available.');
+        }
+
+        return buildCarbonReportTypstSource({
+            carbon: carbon.value,
+            design: draft.portalFrame,
+            frame: resolvedFrame.value,
+            paperSize,
+        });
+    },
+    downloadFilename: 'portal-frame-carbon-report.pdf',
+});
+
+const {
+    paperSize: carbonReportPaperSize,
+    pdfPreviewOpen: carbonReportPreviewOpen,
+    pdfPreviewUrl: carbonReportPreviewUrl,
+    isPreviewingPdf: isCarbonReportPreviewing,
+    error: carbonReportError,
+    previewPdf: previewCarbonReport,
+    confirmDownload: downloadCarbonReport,
+    handlePdfPreviewOpenChange: handleCarbonReportPreviewOpenChange,
+} = carbonReportExport;
 
 function formatCarbon(carbonKg: number): string {
     if (carbonKg >= 1000) {
@@ -460,6 +482,32 @@ function maximumUtilisation(result: FoundationSizingResult): number {
                         </span>
                     </div>
                 </CardContent>
+
+                <CardFooter
+                    class="shrink-0 flex-col gap-2 border-t border-sidebar-border/70 py-4"
+                >
+                    <Button
+                        type="button"
+                        class="w-full"
+                        variant="outline"
+                        :disabled="isCarbonReportPreviewing || !resolvedFrame"
+                        @click="previewCarbonReport()"
+                    >
+                        <FileText class="size-4" />
+                        {{
+                            isCarbonReportPreviewing
+                                ? 'Compiling report…'
+                                : 'Export report'
+                        }}
+                    </Button>
+
+                    <p
+                        v-if="carbonReportError"
+                        class="text-sm text-destructive"
+                    >
+                        {{ carbonReportError }}
+                    </p>
+                </CardFooter>
             </Card>
         </aside>
 
@@ -1046,5 +1094,22 @@ function maximumUtilisation(result: FoundationSizingResult): number {
                 </CardFooter>
             </Card>
         </aside>
+
+        <TypstPdfPreviewDialog
+            :open="carbonReportPreviewOpen"
+            :pdf-preview-url="carbonReportPreviewUrl"
+            :paper-size="carbonReportPaperSize"
+            :is-compiling="isCarbonReportPreviewing"
+            :error="carbonReportError"
+            title="Carbon report preview"
+            description="Review the embodied carbon report before downloading."
+            @update:open="handleCarbonReportPreviewOpenChange"
+            @update:paper-size="
+                (paperSize) => {
+                    carbonReportPaperSize = paperSize;
+                }
+            "
+            @download="downloadCarbonReport()"
+        />
     </div>
 </template>
