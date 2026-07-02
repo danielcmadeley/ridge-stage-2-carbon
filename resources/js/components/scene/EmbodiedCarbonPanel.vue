@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/card';
 import type { ChartConfig } from '@/components/ui/chart';
 import { ChartContainer } from '@/components/ui/chart';
-import { ridgeGreenChartColors } from '@/components/ui/chart/chart-colors';
+import { chartCategoricalColors } from '@/components/ui/chart/chart-colors';
 import { DonutChart } from '@/components/ui/chart-donut';
 import { Separator } from '@/components/ui/separator';
 import type { PortalFrameCarbon } from '@/lib/portal-frame/carbon/carbon';
@@ -78,7 +78,7 @@ const elementChartData = computed<ChartDatum[]>(() => {
 });
 
 function buildChartConfig(data: ChartDatum[]): ChartConfig {
-    const colors = ridgeGreenChartColors(data.length);
+    const colors = chartCategoricalColors(data.length);
 
     return Object.fromEntries(
         data.map((item, index) => [
@@ -92,10 +92,10 @@ function buildChartConfig(data: ChartDatum[]): ChartConfig {
 }
 
 const materialChartColors = computed(() =>
-    ridgeGreenChartColors(materialChartData.value.length),
+    chartCategoricalColors(materialChartData.value.length),
 );
 const elementChartColors = computed(() =>
-    ridgeGreenChartColors(elementChartData.value.length),
+    chartCategoricalColors(elementChartData.value.length),
 );
 
 const materialChartConfig = computed(() =>
@@ -138,7 +138,7 @@ function carbonShare(carbonKg: number): number {
             <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0 flex-1">
                     <CardTitle>Embodied carbon</CardTitle>
-                    <CardDescription>
+                    <CardDescription class="text-xs">
                         A1–A3 estimate from element mass × factor. Includes a
                         250mm slab with H12 top and bottom at 200mm centres,
                         plus 10% steel for connections.

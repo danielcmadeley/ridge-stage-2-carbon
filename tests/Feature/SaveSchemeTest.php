@@ -225,6 +225,57 @@ test('a scheme-only save leaves the building untouched', function () {
         ->and($building->address_label)->toBe('1 Warehouse Way');
 });
 
+test('saving a scheme can update the building placement for an existing building', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user->currentTeam)->create();
+
+    $initialPayload = saveSchemePayload([
+        'building' => [
+            'name' => 'Distribution Shed',
+            'addressLabel' => null,
+        ],
+    ]);
+    unset(
+        $initialPayload['building']['latitude'],
+        $initialPayload['building']['longitude'],
+        $initialPayload['building']['altitude'],
+        $initialPayload['building']['rotation'],
+    );
+
+    $first = $this->actingAs($user)->postJson(
+        saveSchemeUrl($user, $project),
+        $initialPayload,
+    )->assertOk()->assertJsonPath('building.origin', null);
+
+    $payload = saveSchemePayload([
+        'scheme' => ['id' => $first->json('scheme.id'), 'span' => 26],
+    ]);
+    $payload['building'] = [
+        'id' => $first->json('building.id'),
+        'latitude' => 53.1,
+        'longitude' => -2.4,
+        'altitude' => 88.0,
+        'addressLabel' => 'Trafford Park',
+        'rotation' => [0, 0, 0.5],
+    ];
+
+    $this->actingAs($user)->postJson(
+        saveSchemeUrl($user, $project),
+        $payload,
+    )->assertOk()
+        ->assertJsonPath('scheme.design.span', 26)
+        ->assertJsonPath('building.origin', [-2.4, 53.1])
+        ->assertJsonPath('building.addressLabel', 'Trafford Park');
+
+    $building = Scheme::sole()->building->fresh();
+
+    expect($building->name)->toBe('Distribution Shed')
+        ->and($building->latitude)->toBe(53.1)
+        ->and($building->longitude)->toBe(-2.4)
+        ->and($building->address_label)->toBe('Trafford Park')
+        ->and($building->rotation_z)->toBe(0.5);
+});
+
 test('a scheme-only save keeps the scheme name and verified status', function () {
     $user = User::factory()->create();
     $project = Project::factory()->for($user->currentTeam)->create();

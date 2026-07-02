@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { defineAsyncComponent } from 'vue';
+import ClientOnly from '@/components/shared/ClientOnly.vue';
 import PendingInvitationsModal from '@/components/teams/PendingInvitationsModal.vue';
 import type { DashboardInvitation } from '@/types';
 import type { ServerProject } from '@/types/scene';
@@ -34,10 +35,20 @@ withDefaults(
     />
 
     <div class="relative h-svh min-h-0 overflow-hidden">
-        <UkMap3D
-            :projects="projects"
-            :focus-building-slug="focusBuildingSlug"
-            :focus-scheme-id="focusSchemeId"
-        />
+        <ClientOnly>
+            <UkMap3D
+                :projects="projects"
+                :focus-building-slug="focusBuildingSlug"
+                :focus-scheme-id="focusSchemeId"
+            />
+
+            <template #fallback>
+                <div
+                    class="flex h-full items-center justify-center text-sm text-muted-foreground"
+                >
+                    Loading scene…
+                </div>
+            </template>
+        </ClientOnly>
     </div>
 </template>

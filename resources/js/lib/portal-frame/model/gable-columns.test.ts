@@ -15,6 +15,49 @@ describe('gableColumnXPositions', () => {
         expect(gableColumnXPositions(24)).toEqual([-12, -6, 0, 6, 12]);
         expect(GABLE_COLUMN_SPACING_M).toBe(6);
     });
+
+    it('always places a column at the centre of the span', () => {
+        for (const span of [6, 7, 12, 18, 20, 24, 25, 30, 33]) {
+            const positions = gableColumnXPositions(span);
+
+            expect(positions.some((x) => Math.abs(x) < 1e-9)).toBe(true);
+        }
+    });
+
+    it('keeps spacing symmetric about the centre and at or below 6 m', () => {
+        for (const span of [7, 20, 25, 33]) {
+            const positions = gableColumnXPositions(span);
+            const halfSpan = span / 2;
+
+            expect(positions.at(0)).toBeCloseTo(-halfSpan, 9);
+            expect(positions.at(-1)).toBeCloseTo(halfSpan, 9);
+
+            for (let index = 1; index < positions.length; index += 1) {
+                expect(positions[index] - positions[index - 1]).toBeLessThanOrEqual(
+                    GABLE_COLUMN_SPACING_M + 1e-9,
+                );
+            }
+
+            const centreIndex = positions.findIndex((x) => Math.abs(x) < 1e-9);
+            const left = positions.slice(0, centreIndex).reverse();
+            const right = positions.slice(centreIndex + 1);
+
+            expect(left.map((x) => -x)).toEqual(right);
+        }
+    });
+
+    it('divides a non-multiple span evenly instead of leaving a short edge bay', () => {
+        expect(gableColumnXPositions(20)).toEqual([-10, -5, 0, 5, 10]);
+
+        const positions = gableColumnXPositions(25);
+        const spacing = 12.5 / 3;
+
+        expect(positions).toHaveLength(7);
+        expect(positions).toEqual([
+            -3 * spacing, -2 * spacing, -spacing, 0,
+            spacing, 2 * spacing, 3 * spacing,
+        ]);
+    });
 });
 
 describe('buildGableColumns', () => {

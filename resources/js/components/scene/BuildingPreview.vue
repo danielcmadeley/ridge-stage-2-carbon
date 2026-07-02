@@ -24,7 +24,6 @@ const forceHover = ref<ForceDiagramHoverInfo | null>(null);
             clear-color="#9fb8d3"
             :alpha="false"
             :tone-mapping-exposure="0.75"
-            shadows
             render-mode="always"
             class="absolute inset-0 h-full w-full"
         >

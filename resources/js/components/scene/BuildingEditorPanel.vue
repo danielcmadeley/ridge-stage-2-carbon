@@ -14,7 +14,7 @@ import {
     SlidersHorizontal,
 } from '@lucide/vue';
 import { useMediaQuery, useMounted } from '@vueuse/core';
-import { computed, nextTick, reactive, ref, toRaw, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import BuildingPreview from '@/components/scene/BuildingPreview.vue';
 import BuildingStatisticsPanel from '@/components/scene/BuildingStatisticsPanel.vue';
@@ -46,16 +46,20 @@ import type { UseUkMap3dReturn } from '@/composables/useUkMap3d';
 import {
     buildBuildingStatistics,
     findPersistedBuildingContext,
+    formatBuildingLocationLabel,
 } from '@/lib/building/building-statistics';
 import type { GeocodedAddress } from '@/lib/map/geocode-address';
 import type { AnalyticalForceMode } from '@/lib/portal-frame/rendering/three-group';
 import { buildCarbonReportTypstSource } from '@/lib/report/typst-carbon-report';
+import { deepToRaw } from '@/lib/utils';
 import {
     defaultBuildingDraft,
+    isPlacedOnMap,
     portalFrameBounds,
 } from '@/types/custom-building';
 import type {
     BuildingPersistence,
+    BuildingRotation,
     CustomBuilding,
 } from '@/types/custom-building';
 import type { ColumnRestraint } from '@/types/portal-frame';
@@ -222,10 +226,12 @@ function updatePortalFrameDimension(
 }
 
 const teamSlug = computed(() => page.props.currentTeam?.slug ?? null);
-const placedBuildings = computed(() => props.map.customBuildings.value);
+const placedBuildings = computed(() =>
+    props.map.customBuildings.value.filter(isPlacedOnMap),
+);
 const activePlacedBuilding = computed(() =>
     mapBuildingId.value
-        ? (placedBuildings.value.find(
+        ? (props.map.customBuildings.value.find(
               (building) => building.id === mapBuildingId.value,
           ) ?? null)
         : null,
@@ -246,7 +252,9 @@ const activePersistence = computed(
 );
 
 function clonePortalFrameDesign(design: PortalFrameDesign): PortalFrameDesign {
-    return normalizePortalFrameDesign(structuredClone(toRaw(design)));
+    return normalizePortalFrameDesign(
+        structuredClone(deepToRaw(design)) as PortalFrameDesign,
+    );
 }
 
 function syncDraftFromBuilding(building: CustomBuilding): void {
@@ -257,15 +265,16 @@ function syncDraftFromBuilding(building: CustomBuilding): void {
     draft.rotation = [...building.rotation];
 }
 
-// Keep the save form in sync with whichever building is currently active.
-watch(activePlacedBuilding, (building) => {
+// Keep the save form in sync with the active building identity, including
+// when a saved building has been removed from the map.
+watch(activePersistence, (persisted) => {
     saveError.value = null;
     saveSuccess.value = false;
-    buildingName.value = building?.persisted?.name ?? '';
-    addressQuery.value = building?.persisted?.addressLabel ?? '';
+    buildingName.value = persisted?.name ?? '';
+    addressQuery.value = persisted?.addressLabel ?? '';
 
-    if (building?.persisted?.projectSlug) {
-        selectedProjectSlug.value = building.persisted.projectSlug;
+    if (persisted?.projectSlug) {
+        selectedProjectSlug.value = persisted.projectSlug;
     }
 });
 
@@ -338,7 +347,30 @@ const locationLabel = computed(() => {
         return query;
     }
 
-    return activePlacedBuilding.value?.persisted?.addressLabel ?? null;
+    const active = activePlacedBuilding.value;
+
+    if (active?.origin) {
+        return formatBuildingLocationLabel({
+            addressLabel:
+                active.persisted?.addressLabel ??
+                activePersistence.value?.addressLabel,
+            origin: active.origin,
+        });
+    }
+
+    const persisted = activePersistence.value;
+
+    if (!persisted) {
+        return null;
+    }
+
+    const context = findPersistedBuildingContext(props.projects, persisted);
+
+    return formatBuildingLocationLabel({
+        addressLabel:
+            persisted.addressLabel ?? context?.building.addressLabel ?? null,
+        origin: context?.building.origin ?? null,
+    });
 });
 
 const buildingStatistics = computed(() =>
@@ -349,7 +381,7 @@ const buildingStatistics = computed(() =>
             carbon.value?.floorAreaM2 ??
             draft.portalFrame.span * draft.portalFrame.buildingLength,
         locationLabel: locationLabel.value,
-        persisted: activePlacedBuilding.value?.persisted,
+        persisted: activePersistence.value ?? undefined,
         fallbackProjectSlug: selectedProjectSlug.value,
     }),
 );
@@ -419,6 +451,7 @@ async function saveBuilding(): Promise<void> {
 
         const nextPersistence: BuildingPersistence = {
             buildingId: response.building.id,
+            buildingSlug: response.building.slug,
             projectSlug: selectedProjectSlug.value,
             schemeId: response.scheme.id,
             name: response.building.name,
@@ -444,9 +477,8 @@ async function saveBuilding(): Promise<void> {
 }
 
 /**
- * Save just the active scheme's design snapshot, leaving the building's
- * name and placement untouched. Used by the toolbar save button once the
- * building has already been saved.
+ * Save the active scheme's design snapshot and sync the building's current
+ * map placement. Location is shared across schemes on the same building.
  */
 async function saveActiveScheme(): Promise<void> {
     const persisted = activePersistence.value;
@@ -465,17 +497,26 @@ async function saveActiveScheme(): Promise<void> {
 
     try {
         const { saveScheme } = await import('@/lib/building/save-scheme');
+        const active = activePlacedBuilding.value;
 
         const response = await saveScheme(
             teamSlug.value,
             persisted.projectSlug,
             {
-                building: { id: persisted.buildingId },
+                building: {
+                    id: persisted.buildingId,
+                    addressLabel:
+                        addressQuery.value.trim() ||
+                        persisted.addressLabel ||
+                        null,
+                },
                 scheme: { id: persisted.schemeId ?? null },
                 draft: {
                     portalFrame: { ...draft.portalFrame },
                     rotation: [...draft.rotation],
                 },
+                origin: active?.origin ?? null,
+                altitude: active?.altitude ?? null,
                 carbon: carbon.value,
                 members: resolvedFrame.value.members,
                 foundationSizing: foundationSizing.value,
@@ -485,9 +526,8 @@ async function saveActiveScheme(): Promise<void> {
         const nextPersistence: BuildingPersistence = {
             ...persisted,
             schemeId: response.scheme.id,
+            addressLabel: response.building.addressLabel,
         };
-
-        const active = activePlacedBuilding.value;
 
         if (active) {
             props.map.attachPersistence(active.id, nextPersistence);
@@ -696,6 +736,53 @@ function syncDraftToMap(): void {
     });
 }
 
+async function persistBuildingPlacement(
+    persisted: BuildingPersistence,
+    placement: {
+        origin: [number, number] | null;
+        altitude?: number;
+        addressLabel?: string | null;
+        rotation?: BuildingRotation;
+    },
+): Promise<BuildingPersistence | null> {
+    if (!teamSlug.value) {
+        return null;
+    }
+
+    try {
+        const { saveBuildingPlacement } =
+            await import('@/lib/building/save-building-placement');
+
+        const response = await saveBuildingPlacement(
+            teamSlug.value,
+            persisted.projectSlug,
+            persisted.buildingSlug,
+            {
+                latitude: placement.origin ? placement.origin[1] : null,
+                longitude: placement.origin ? placement.origin[0] : null,
+                altitude: placement.origin
+                    ? (placement.altitude ?? null)
+                    : null,
+                addressLabel: placement.addressLabel ?? null,
+                rotation: placement.rotation,
+            },
+        );
+
+        return {
+            ...persisted,
+            addressLabel: response.building.addressLabel,
+        };
+    } catch (error) {
+        toast.error(
+            error instanceof Error
+                ? error.message
+                : 'Could not save this building location.',
+        );
+
+        return null;
+    }
+}
+
 async function placeBuildingAtAddress(result: GeocodedAddress): Promise<void> {
     const origin: [number, number] = [result.lng, result.lat];
     const buildingDraft = {
@@ -713,11 +800,24 @@ async function placeBuildingAtAddress(result: GeocodedAddress): Promise<void> {
     const building = props.map.addBuildingAt(buildingDraft, origin);
 
     if (persisted) {
-        props.map.attachPersistence(building.id, {
+        const nextPersistence: BuildingPersistence = {
             ...persisted,
             addressLabel: result.label,
-        });
+        };
+
+        props.map.attachPersistence(building.id, nextPersistence);
         unplacedPersistence.value = null;
+
+        const saved = await persistBuildingPlacement(nextPersistence, {
+            origin,
+            altitude: building.altitude,
+            addressLabel: result.label,
+            rotation: buildingDraft.rotation,
+        });
+
+        if (saved) {
+            props.map.attachPersistence(building.id, saved);
+        }
     }
 
     mapBuildingId.value = building.id;
@@ -727,11 +827,33 @@ async function placeBuildingAtAddress(result: GeocodedAddress): Promise<void> {
     props.openMap({ flyToId: building.id });
 }
 
-function removePlacedBuilding(id: string): void {
+async function removePlacedBuilding(id: string): Promise<void> {
+    const building = placedBuildings.value.find((entry) => entry.id === id);
+    const persisted = building?.persisted;
+
     props.map.removeBuilding(id);
 
     if (mapBuildingId.value === id) {
         mapBuildingId.value = null;
+    }
+
+    if (!persisted) {
+        return;
+    }
+
+    // Keep scheme identity alive after the building is removed from the map.
+    unplacedPersistence.value = {
+        ...persisted,
+        addressLabel: null,
+    };
+
+    const saved = await persistBuildingPlacement(persisted, {
+        origin: null,
+        addressLabel: null,
+    });
+
+    if (saved) {
+        unplacedPersistence.value = saved;
     }
 }
 

@@ -77,6 +77,26 @@ export function formatBuildingDimensions(design: PortalFrameDesign): string {
     return `${formatDimensionM(design.span)} × ${formatDimensionM(design.buildingLength)}`;
 }
 
+/** Human-readable location for building statistics and reports. */
+export function formatBuildingLocationLabel(input: {
+    addressLabel?: string | null;
+    origin?: [number, number] | null;
+}): string | null {
+    const address = input.addressLabel?.trim();
+
+    if (address) {
+        return address;
+    }
+
+    if (!input.origin) {
+        return null;
+    }
+
+    const [longitude, latitude] = input.origin;
+
+    return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+}
+
 export function buildBuildingStatistics(input: {
     projects: ServerProject[];
     design: PortalFrameDesign;

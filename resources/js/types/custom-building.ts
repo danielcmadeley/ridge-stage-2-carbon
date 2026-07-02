@@ -15,6 +15,7 @@ export type BuildingDraft = {
 /** Server identifiers attached to a placed building once it has been saved. */
 export type BuildingPersistence = {
     buildingId: number;
+    buildingSlug: string;
     projectSlug: string;
     schemeId: number | null;
     name: string;
@@ -74,6 +75,7 @@ export function customBuildingFromServer(
         ),
         persisted: {
             buildingId: building.id,
+            buildingSlug: building.slug,
             projectSlug,
             schemeId: activeScheme?.id ?? null,
             name: building.name,

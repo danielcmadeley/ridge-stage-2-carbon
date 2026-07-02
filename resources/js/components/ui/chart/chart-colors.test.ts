@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+    CHART_CATEGORICAL_PALETTE,
+    chartCategoricalColors,
     chartColorVariables,
     defaultColors,
     ridgeGreenChartColors,
@@ -21,19 +23,37 @@ describe('ridgeGreenChartColors', () => {
     });
 });
 
+describe('chartCategoricalColors', () => {
+    it('returns pastel hues for each segment', () => {
+        expect(chartCategoricalColors(4)).toEqual([
+            '#86efac',
+            '#f9a8d4',
+            '#7dd3fc',
+            '#fcd34d',
+        ]);
+    });
+
+    it('cycles through the palette for additional segments', () => {
+        expect(chartCategoricalColors(10)[9]).toBe('#fde047');
+        expect(chartCategoricalColors(11)[10]).toBe(
+            CHART_CATEGORICAL_PALETTE[0],
+        );
+    });
+});
+
 describe('chartColorVariables', () => {
-    it('uses the ridge green palette', () => {
-        expect(chartColorVariables(2)).toEqual(['#003723', '#005032']);
+    it('uses the categorical palette', () => {
+        expect(chartColorVariables(2)).toEqual(['#86efac', '#f9a8d4']);
     });
 });
 
 describe('defaultColors', () => {
-    it('returns one ridge green color per requested segment', () => {
+    it('returns one categorical color per requested segment', () => {
         expect(defaultColors(4)).toEqual([
-            '#003723',
-            '#005032',
-            '#1f7a4d',
-            '#3da56a',
+            '#86efac',
+            '#f9a8d4',
+            '#7dd3fc',
+            '#fcd34d',
         ]);
     });
 });

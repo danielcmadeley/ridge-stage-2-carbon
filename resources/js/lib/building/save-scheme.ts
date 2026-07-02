@@ -24,8 +24,9 @@ export type SaveSchemeInput = {
     };
     draft: BuildingDraft;
     /**
-     * Omit (or pass null) to leave the building's placement untouched — e.g.
-     * for a scheme-only save, or a building that has no map location yet.
+     * Omit (or pass null) to leave the building's map placement untouched.
+     * Pass coordinates when saving a placed building so the location is
+     * shared across all schemes on that building.
      */
     origin?: [lng: number, lat: number] | null;
     altitude?: number | null;

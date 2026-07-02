@@ -112,7 +112,8 @@ const segmentEvents = {
             <ChartSingleTooltip
                 v-if="showTooltip"
                 :selector="Donut.selectors.segment"
-                :index="category"
+                :index="index"
+                :value-key="category"
                 :items="legendItems"
                 :value-formatter="valueFormatter"
                 :custom-tooltip="customTooltip"

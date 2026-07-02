@@ -5,10 +5,12 @@ import { omit } from '@unovis/ts';
 import { VisTooltip } from '@unovis/vue';
 import { createApp } from 'vue';
 import ChartTooltip from './ChartTooltip.vue';
+import { resolveChartTooltipDatum } from './chart-single-tooltip';
 
 const props = defineProps<{
     selector: string;
     index: string;
+    valueKey?: string;
     items?: BulletLegendItemInterface[];
     valueFormatter?: (tick: number, i?: number, ticks?: number[]) => string;
     customTooltip?: Component;
@@ -23,14 +25,16 @@ function template(
 ): string {
     const valueFormatter =
         props.valueFormatter ?? ((tick: number) => `${tick}`);
+    const valueKey = props.valueKey ?? props.index;
+    const record = resolveChartTooltipDatum(d);
 
-    if (props.index in d) {
-        if (wm.has(d)) {
-            return wm.get(d)!;
+    if (props.index in record) {
+        if (wm.has(record)) {
+            return wm.get(record)!;
         }
 
         const componentDiv = document.createElement('div');
-        const omittedData = Object.entries(omit(d, [props.index])).map(
+        const omittedData = Object.entries(omit(record, [props.index])).map(
             ([key, value]) => {
                 const legendReference = props.items?.find(
                     (item) => item.name === key,
@@ -46,25 +50,23 @@ function template(
         const TooltipComponent = props.customTooltip ?? ChartTooltip;
 
         createApp(TooltipComponent, {
-            title: String(d[props.index]),
+            title: String(record[props.index]),
             data: omittedData,
         }).mount(componentDiv);
-        wm.set(d, componentDiv.innerHTML);
+        wm.set(record, componentDiv.innerHTML);
 
         return componentDiv.innerHTML;
     }
 
-    const data = d.data as Record<string, unknown>;
-
-    if (wm.has(data)) {
-        return wm.get(data)!;
+    if (wm.has(record)) {
+        return wm.get(record)!;
     }
 
     const style = getComputedStyle(elements[i]);
     const omittedData = [
         {
-            name: String(data.name ?? data[props.index]),
-            value: valueFormatter(Number(data[props.index])),
+            name: String(record[props.index] ?? record.name),
+            value: valueFormatter(Number(record[valueKey])),
             color: style.fill,
         },
     ];
@@ -72,10 +74,10 @@ function template(
     const TooltipComponent = props.customTooltip ?? ChartTooltip;
 
     createApp(TooltipComponent, {
-        title: String(d[props.index] ?? data.name),
+        title: String(record[props.index] ?? record.name),
         data: omittedData,
     }).mount(componentDiv);
-    wm.set(data, componentDiv.innerHTML);
+    wm.set(record, componentDiv.innerHTML);
 
     return componentDiv.innerHTML;
 }

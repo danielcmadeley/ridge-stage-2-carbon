@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { DirectionalLight } from 'three';
 import { Group } from 'three';
 import { computed, onUnmounted, shallowRef, watch } from 'vue';
 import SceneOrbitControls from '@/components/scene/SceneOrbitControls.vue';
@@ -84,44 +83,6 @@ watch(
     { immediate: true },
 );
 
-const sunLight = shallowRef<DirectionalLight | null>(null);
-
-const shadowCameraBounds = computed(() => {
-    const extent = metrics.value.size * 1.25;
-
-    return {
-        extent,
-        far: metrics.value.size * 8,
-    };
-});
-
-watch(
-    [sunLight, shadowCameraBounds],
-    () => {
-        const light = sunLight.value;
-
-        if (!light?.shadow?.camera) {
-            return;
-        }
-
-        const { extent, far } = shadowCameraBounds.value;
-        const camera = light.shadow.camera;
-
-        camera.left = -extent;
-        camera.right = extent;
-        camera.top = extent;
-        camera.bottom = -extent;
-        camera.near = 0.5;
-        camera.far = far;
-        camera.updateProjectionMatrix();
-
-        light.shadow.mapSize.set(2048, 2048);
-        light.shadow.bias = -0.00015;
-        light.shadow.normalBias = 0.02;
-    },
-    { immediate: true },
-);
-
 const cameraPosition = computed(
     () =>
         [
@@ -191,10 +152,8 @@ onUnmounted(() => {
         :intensity="0.45"
     />
     <TresDirectionalLight
-        ref="sunLight"
         :position="sunPosition"
         :intensity="1.15"
-        cast-shadow
     />
 
     <primitive

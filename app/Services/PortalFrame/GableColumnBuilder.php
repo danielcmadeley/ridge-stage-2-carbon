@@ -21,15 +21,27 @@ class GableColumnBuilder
     ) {}
 
     /**
+     * Gable column positions across the span (X axis), centred on the ridge.
+     *
+     * A column always sits at the centre (x = 0); further columns step outward
+     * symmetrically on both sides. Each half-span is divided into the fewest
+     * segments that keep every bay at or below `GABLE_COLUMN_SPACING_M`, so the
+     * spacing is even and the column count is minimal. The two outermost
+     * positions coincide with the eaves corner columns, which
+     * `isExistingGableCornerColumn` later skips because the portal frame
+     * already places columns there.
+     *
      * @return list<float>
      */
     public function gableColumnXPositions(float $span): array
     {
         $halfSpan = $span / 2;
+        $segmentsPerHalf = max(1, (int) ceil($halfSpan / self::GABLE_COLUMN_SPACING_M - 1e-9));
+        $spacing = $halfSpan / $segmentsPerHalf;
 
         return array_map(
-            fn (float $offset): float => -$halfSpan + $offset,
-            MemberSpacing::spacedOffsetsAlongSpan($span, 0.0, 0.0, self::GABLE_COLUMN_SPACING_M),
+            fn (int $index): float => ($index - $segmentsPerHalf) * $spacing,
+            range(0, $segmentsPerHalf * 2),
         );
     }
 

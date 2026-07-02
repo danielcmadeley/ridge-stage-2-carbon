@@ -315,7 +315,19 @@ export function buildCarbonReportTypstSource(input: CarbonReportInput): string {
   rgb("#7c3aed"),
 )
 
-#let pie-gradient = gradient.linear(..ridge-green-colors)
+#let pie-colors = (
+  rgb("#86efac"),
+  rgb("#f9a8d4"),
+  rgb("#7dd3fc"),
+  rgb("#fcd34d"),
+  rgb("#c4b5fd"),
+  rgb("#fca5a5"),
+  rgb("#5eead4"),
+  rgb("#cbd5e1"),
+  rgb("#93c5fd"),
+  rgb("#fde047"),
+)
+#let pie-slice-style = (idx) => (fill: pie-colors.at(calc.rem(idx, pie-colors.len())), stroke: none)
 #let chart-gradient = gradient.linear(..chart-colors)
 #let chart-bar-style = (idx) => (fill: chart-colors.at(calc.rem(idx, chart-colors.len())), stroke: none)
 
@@ -419,7 +431,7 @@ ${elementChartData}        ),
         label-key: 0,
         value-key: 1,
         radius: ${pieRadius},
-        slice-style: pie-gradient,
+        slice-style: pie-slice-style,
         stroke: 0.5pt + white,
         inner-radius: ${pieInnerRadius},
         outer-label: (content: "%", radius: 110%),
@@ -437,7 +449,7 @@ ${categoryChartData}        ),
         label-key: 0,
         value-key: 1,
         radius: ${pieRadius},
-        slice-style: pie-gradient,
+        slice-style: pie-slice-style,
         stroke: 0.5pt + white,
         inner-radius: ${pieInnerRadius},
         outer-label: (content: "%", radius: 110%),

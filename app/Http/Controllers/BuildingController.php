@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreBuildingRequest;
 use App\Http\Requests\UpdateBuildingRequest;
+use App\Http\Resources\BuildingResource;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -36,8 +38,14 @@ class BuildingController extends Controller
 
     /**
      * Update a building's metadata within a project.
+     *
+     * Only attributes the payload actually carries are written, so a
+     * placement-only PATCH (latitude/longitude/address_label) leaves the name
+     * untouched, and sending latitude: null clears the location. JSON
+     * requests (the scene's placement save) get the updated building back;
+     * Inertia form posts (the dashboard) redirect as before.
      */
-    public function update(UpdateBuildingRequest $request, string $current_team, string $project, string $building): RedirectResponse
+    public function update(UpdateBuildingRequest $request, string $current_team, string $project, string $building): RedirectResponse|JsonResponse
     {
         $projectModel = $request->user()->currentTeam
             ->projects()
@@ -48,14 +56,23 @@ class BuildingController extends Controller
             ->where('slug', $building)
             ->firstOrFail();
 
-        $buildingModel->fill([
-            ...$request->safe()->only(['name', 'address_label', 'altitude', 'preferred_scheme_id']),
-            'latitude' => $request->filled('latitude') ? $request->float('latitude') : $buildingModel->latitude,
-            'longitude' => $request->filled('longitude') ? $request->float('longitude') : $buildingModel->longitude,
-            'rotation_x' => $request->input('rotation.0', $buildingModel->rotation_x),
-            'rotation_y' => $request->input('rotation.1', $buildingModel->rotation_y),
-            'rotation_z' => $request->input('rotation.2', $buildingModel->rotation_z),
-        ])->save();
+        $buildingModel->fill(
+            $request->safe()->only(['name', 'address_label', 'altitude', 'latitude', 'longitude', 'preferred_scheme_id'])
+        );
+
+        if ($request->has('rotation')) {
+            $buildingModel->rotation_x = (float) $request->input('rotation.0', 0);
+            $buildingModel->rotation_y = (float) $request->input('rotation.1', 0);
+            $buildingModel->rotation_z = (float) $request->input('rotation.2', 0);
+        }
+
+        $buildingModel->save();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'building' => new BuildingResource($buildingModel),
+            ]);
+        }
 
         return back();
     }

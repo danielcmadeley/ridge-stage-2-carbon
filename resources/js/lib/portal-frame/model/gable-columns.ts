@@ -1,4 +1,3 @@
-import { spacedOffsetsAlongSpan } from '@/lib/portal-frame/model/member-spacing';
 import {
     pointOnRafterAtX,
     rafterUndersideZAtX,
@@ -15,11 +14,30 @@ const FOOTING_WIDTH_M = 1.5;
 const FOOTING_DEPTH_M = 1.5;
 const FOOTING_HEIGHT_M = 0.5;
 
+/**
+ * Gable column positions across the span (X axis), centred on the ridge.
+ *
+ * A column always sits at the centre (x = 0); further columns step outward
+ * symmetrically on both sides. Each half-span is divided into the fewest
+ * segments that keep every bay at or below `GABLE_COLUMN_SPACING_M`, so the
+ * spacing is even and the column count is minimal. The two outermost
+ * positions coincide with the eaves corner columns, which
+ * `isExistingGableCornerColumn` later skips because the portal frame already
+ * places columns there.
+ *
+ * @return list of X positions in metres, sorted from left edge to right edge
+ */
 export function gableColumnXPositions(span: number): number[] {
     const halfSpan = span / 2;
+    const segmentsPerHalf = Math.max(
+        1,
+        Math.ceil(halfSpan / GABLE_COLUMN_SPACING_M - 1e-9),
+    );
+    const spacing = halfSpan / segmentsPerHalf;
 
-    return spacedOffsetsAlongSpan(span, 0, 0, GABLE_COLUMN_SPACING_M).map(
-        (offset) => -halfSpan + offset,
+    return Array.from(
+        { length: segmentsPerHalf * 2 + 1 },
+        (_, index) => (index - segmentsPerHalf) * spacing,
     );
 }
 

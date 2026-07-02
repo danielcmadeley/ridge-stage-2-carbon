@@ -3,6 +3,7 @@ import {
     buildBuildingStatistics,
     findPersistedBuildingContext,
     formatBuildingDimensions,
+    formatBuildingLocationLabel,
     formatFloorAreaM2,
     schemeVersionLabel,
 } from '@/lib/building/building-statistics';
@@ -64,6 +65,7 @@ describe('findPersistedBuildingContext', () => {
         expect(
             findPersistedBuildingContext(projects, {
                 buildingId: 10,
+                buildingSlug: 'shed-a',
                 projectSlug: 'riverside-depot',
                 schemeId: 100,
                 name: 'Shed A',
@@ -118,6 +120,26 @@ describe('formatBuildingDimensions', () => {
     });
 });
 
+describe('formatBuildingLocationLabel', () => {
+    it('prefers a geocoded address when present', () => {
+        expect(
+            formatBuildingLocationLabel({
+                addressLabel: '1 Warehouse Way',
+                origin: [-1.9, 52.4],
+            }),
+        ).toBe('1 Warehouse Way');
+    });
+
+    it('falls back to coordinates when the building is placed without an address', () => {
+        expect(
+            formatBuildingLocationLabel({
+                addressLabel: null,
+                origin: [-1.9, 52.4],
+            }),
+        ).toBe('52.40000, -1.90000');
+    });
+});
+
 describe('buildBuildingStatistics', () => {
     it('builds the sidebar statistics for a persisted building', () => {
         expect(
@@ -128,6 +150,7 @@ describe('buildBuildingStatistics', () => {
                 locationLabel: '1 Warehouse Way',
                 persisted: {
                     buildingId: 10,
+                    buildingSlug: 'shed-a',
                     projectSlug: 'riverside-depot',
                     schemeId: 100,
                     name: 'Shed A',

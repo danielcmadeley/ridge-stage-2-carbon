@@ -53,6 +53,7 @@
 
     --color-ridge-green: #003723;
     --color-ridge-fuchsia: #c6128f;
+    --color-ridge-grey: #e4e4e4;
 
     --color-sidebar: var(--sidebar-background);
     --color-sidebar-foreground: var(--sidebar-foreground);
