@@ -16,6 +16,7 @@ import { adjustMembersForRendering } from '@/lib/portal-frame/model/render-adjus
 import { createColumnGridGroup } from '@/lib/portal-frame/rendering/column-grid/column-grid';
 import { createPortalFrameGroup } from '@/lib/portal-frame/rendering/geometries/i-shape-geometry';
 import { createStickAnalysisGroup } from '@/lib/portal-frame/rendering/stick-model';
+import { createSupportAnnotationsGroup } from '@/lib/portal-frame/rendering/support-annotations';
 import type { PortalFrameDesign } from '@/types/portal-frame';
 
 export type PortalFrameViewMode = 'solid' | 'analytical';
@@ -58,6 +59,14 @@ export function buildPortalFrameThreeGroup(
                 built,
                 design,
                 forceMode,
+                loadCase,
+            ),
+        );
+        group.add(
+            createSupportAnnotationsGroup(
+                analysisMembers,
+                built,
+                design,
                 loadCase,
             ),
         );

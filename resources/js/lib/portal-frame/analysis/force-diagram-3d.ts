@@ -47,7 +47,7 @@ function memberAnalysisKey(memberId: string): string {
     return match ? match[1] : memberId;
 }
 
-function frameIndexFromMemberId(memberId: string): number | null {
+export function frameIndexFromMemberId(memberId: string): number | null {
     const match = memberId.match(/^frame-(\d+)-/);
 
     return match ? Number(match[1]) : null;

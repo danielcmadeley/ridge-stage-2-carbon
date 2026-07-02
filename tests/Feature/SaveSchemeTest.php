@@ -4,6 +4,7 @@ use App\Enums\SchemeStatus;
 use App\Models\Project;
 use App\Models\Scheme;
 use App\Models\User;
+use Inertia\Testing\AssertableInertia as Assert;
 
 /**
  * A full Save payload matching SaveSchemeRequest.
@@ -340,4 +341,44 @@ test('saving validates the payload', function () {
         saveSchemeUrl($user, $project),
         saveSchemePayload(['scheme' => ['span' => null]]),
     )->assertUnprocessable()->assertJsonValidationErrors('scheme.span');
+});
+
+test('partially reloading scene projects returns scheme designs saved after the page loaded', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user->currentTeam)->create();
+
+    $created = $this->actingAs($user)->postJson(
+        saveSchemeUrl($user, $project),
+        saveSchemePayload(),
+    );
+    $created->assertOk();
+
+    $response = $this
+        ->actingAs($user)
+        ->get(route('scene', ['current_team' => $user->currentTeam->slug]));
+
+    $response->assertOk();
+    $response->assertInertia(fn (Assert $page) => $page
+        ->component('Scene')
+        ->where('projects.0.buildings.0.schemes.0.design.span', 24),
+    );
+
+    // The editor saves through a plain fetch, so the page props go stale; a
+    // partial reload of `projects` must surface the newly saved design.
+    $this->actingAs($user)->postJson(
+        saveSchemeUrl($user, $project),
+        saveSchemePayload([
+            'building' => ['id' => $created->json('building.id')],
+            'scheme' => [
+                'id' => $created->json('scheme.id'),
+                'span' => 30,
+            ],
+        ]),
+    )->assertOk();
+
+    $response->assertInertia(fn (Assert $page) => $page
+        ->reloadOnly('projects', fn (Assert $reload) => $reload
+            ->where('projects.0.buildings.0.schemes.0.design.span', 30),
+        ),
+    );
 });

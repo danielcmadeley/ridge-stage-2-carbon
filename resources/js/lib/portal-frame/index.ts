@@ -54,7 +54,10 @@ export {
     type FoundationDimensions,
     type FoundationSizingResult,
 } from '@/lib/portal-frame/foundation/foundation-sizing';
-export { foundationWindLoadKn } from '@/lib/portal-frame/foundation/foundation-wind-load';
+export {
+    FOUNDATION_REFERENCE_WIND_PRESSURE_KN_M2,
+    foundationWindLoadKn,
+} from '@/lib/portal-frame/foundation/foundation-wind-load';
 export {
     createForceDiagramGroup,
     type AnalyticalForceMode,

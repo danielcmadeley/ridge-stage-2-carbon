@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import {
     ChevronLeft,
     ChevronRight,
@@ -144,17 +144,10 @@ const {
     resolvedFrame,
     frameError,
     baseReactions,
-    factoredBaseReactions,
     foundationSizing,
     foundationSizingEntries,
     carbon,
 } = usePortalFrameResults(() => draft.portalFrame);
-
-const analyticalBaseReactions = computed(() =>
-    analyticalLoadCase.value === 'factored'
-        ? factoredBaseReactions.value
-        : baseReactions.value,
-);
 
 const carbonReportExport = useTypstPdfExport({
     buildSource: (paperSize) => {
@@ -391,6 +384,15 @@ function currentSchemeSaveInput(): Omit<SaveSchemeInput, 'building'> | null {
     };
 }
 
+/**
+ * The scheme designs shown by the switcher come from the `projects` page prop,
+ * which a fetch-based save leaves stale. Partially reload it so switching back
+ * to a saved scheme restores the design that was just saved.
+ */
+function refreshProjectsProp(): void {
+    router.reload({ only: ['projects'] });
+}
+
 async function saveBuilding(): Promise<void> {
     saveError.value = null;
     saveSuccess.value = false;
@@ -457,6 +459,7 @@ async function saveBuilding(): Promise<void> {
 
         buildingName.value = response.building.name;
         saveSuccess.value = true;
+        refreshProjectsProp();
     } catch (error) {
         saveError.value =
             error instanceof Error
@@ -520,6 +523,7 @@ async function saveActiveScheme(): Promise<void> {
         }
 
         toast.success('Scheme saved.');
+        refreshProjectsProp();
     } catch (error) {
         toast.error(
             error instanceof Error
@@ -1109,13 +1113,14 @@ function updateFoundationAssumption(
                             v-if="activeTab === 'analytical'"
                             v-model:force-mode="analyticalForceMode"
                             v-model:load-case="analyticalLoadCase"
-                            :base-reactions="analyticalBaseReactions"
                         />
 
                         <!-- Foundation Properties -->
                         <FoundationPropertiesTab
                             v-if="activeTab === 'foundation'"
                             :foundation="draft.portalFrame.foundation"
+                            :design="draft.portalFrame"
+                            :base-reactions="baseReactions"
                             :foundation-sizing="foundationSizing"
                             :foundation-sizing-entries="foundationSizingEntries"
                             @update-type="updateFoundationType"
