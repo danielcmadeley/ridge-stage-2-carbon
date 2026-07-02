@@ -33,6 +33,7 @@ export type UsePortalFrameResultsReturn = {
     resolvedFrame: ComputedRef<BuiltPortalFrame | null>;
     frameError: ComputedRef<string | null>;
     baseReactions: ComputedRef<SupportReactions | null>;
+    factoredBaseReactions: ComputedRef<SupportReactions | null>;
     foundationSizing: ComputedRef<FoundationSizingBySide | null>;
     foundationSizingEntries: ComputedRef<FoundationSizingEntry[]>;
     carbon: ComputedRef<PortalFrameCarbon | null>;
@@ -79,6 +80,27 @@ export function usePortalFrameResults(
         }
     });
 
+    /**
+     * ULS factored reactions for the analytical display only. Foundation
+     * sizing keeps consuming the characteristic `baseReactions` and applies
+     * its own partial factors internally.
+     */
+    const factoredBaseReactions = computed(() => {
+        if (!resolvedFrame.value) {
+            return null;
+        }
+
+        try {
+            return analyzeGoverningPortalFrame(
+                resolvedFrame.value,
+                toValue(design),
+                'factored',
+            ).reactions;
+        } catch {
+            return null;
+        }
+    });
+
     const foundationSizing = computed(() => {
         if (!baseReactions.value) {
             return null;
@@ -118,6 +140,7 @@ export function usePortalFrameResults(
         resolvedFrame,
         frameError,
         baseReactions,
+        factoredBaseReactions,
         foundationSizing,
         foundationSizingEntries,
         carbon,

@@ -72,8 +72,6 @@ describe('usePortalFrameResults', () => {
         expect(results.foundationSizing.value?.left.dimensions).not.toEqual(
             padDimensions,
         );
-        expect(results.carbon.value?.breakdown.rebar.massKg).toBeGreaterThan(
-            0,
-        );
+        expect(results.carbon.value?.breakdown.rebar.massKg).toBeGreaterThan(0);
     });
 });

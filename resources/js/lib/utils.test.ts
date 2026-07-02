@@ -32,7 +32,10 @@ describe('deepToRaw', () => {
     it('produces a tree that structuredClone can copy without DataCloneError', () => {
         const design = reactive({
             span: 24,
-            foundation: { type: 'reinforced_pad', assumptions: { cover: 0.05 } },
+            foundation: {
+                type: 'reinforced_pad',
+                assumptions: { cover: 0.05 },
+            },
         });
 
         expect(() => structuredClone(deepToRaw(design))).not.toThrow();

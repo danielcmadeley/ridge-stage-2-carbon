@@ -2,12 +2,7 @@
 import { OrbitControls } from '@tresjs/cientos';
 import { useTresContext } from '@tresjs/core';
 import type { OrbitControls as OrbitControlsInstance } from 'three-stdlib';
-import {
-    computed,
-    shallowRef,
-    unref,
-    watch,
-} from 'vue';
+import { computed, shallowRef, unref, watch } from 'vue';
 
 const props = withDefaults(
     defineProps<{

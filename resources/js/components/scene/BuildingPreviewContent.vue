@@ -5,24 +5,31 @@ import SceneOrbitControls from '@/components/scene/SceneOrbitControls.vue';
 import ZUpSky from '@/components/scene/ZUpSky.vue';
 import { useColumnGridSelection } from '@/composables/useColumnGridSelection';
 import { useForceDiagramHover } from '@/composables/useForceDiagramHover';
+import { useFrameMemberSelection } from '@/composables/useFrameMemberSelection';
 import type { ForceDiagramHoverInfo } from '@/lib/portal-frame/analysis/force-diagram-hover';
 import {
     disposeObject3D,
     portalFramePreviewMetrics,
     replacePortalFrameThreeGroup,
 } from '@/lib/portal-frame/rendering/three-group';
-import type { AnalyticalForceMode } from '@/lib/portal-frame/rendering/three-group';
+import type {
+    AnalyticalForceMode,
+    AnalyticalLoadCase,
+} from '@/lib/portal-frame/rendering/three-group';
 import type { BuildingDraft } from '@/types/custom-building';
+import type { FrameMember } from '@/types/portal-frame';
 
 const props = defineProps<{
     draft: BuildingDraft;
     analyticalView?: boolean;
     analyticalForceMode?: AnalyticalForceMode;
+    analyticalLoadCase?: AnalyticalLoadCase;
     surroundings?: Group | null;
 }>();
 
 const emit = defineEmits<{
     forceHover: [ForceDiagramHoverInfo | null];
+    memberSelect: [FrameMember | null];
 }>();
 
 const frameGroup = shallowRef<Group>(new Group());
@@ -34,14 +41,16 @@ watch(
             props.draft.portalFrame,
             props.analyticalView,
             props.analyticalForceMode,
+            props.analyticalLoadCase,
         ] as const,
-    ([design, analyticalView, forceMode]) => {
+    ([design, analyticalView, forceMode, loadCase]) => {
         try {
             frameGroup.value = replacePortalFrameThreeGroup(
                 frameGroup.value,
                 design,
                 analyticalView ? 'analytical' : 'solid',
                 forceMode ?? 'moment',
+                loadCase ?? 'unfactored',
             );
         } catch {
             // Out-of-scope or unresolved design: clear the preview. The editor
@@ -75,10 +84,23 @@ useColumnGridSelection({
     lineThresholdM,
 });
 
+const { selectedMember } = useFrameMemberSelection({
+    enabled: computed(() => !analyticalViewEnabled.value),
+    frameGroup,
+});
+
 watch(
     hoverInfo,
     (info) => {
         emit('forceHover', info ?? null);
+    },
+    { immediate: true },
+);
+
+watch(
+    selectedMember,
+    (member) => {
+        emit('memberSelect', member ?? null);
     },
     { immediate: true },
 );
@@ -151,10 +173,7 @@ onUnmounted(() => {
         :ground-color="'#b8aea6'"
         :intensity="0.8"
     />
-    <TresDirectionalLight
-        :position="sunPosition"
-        :intensity="1.85"
-    />
+    <TresDirectionalLight :position="sunPosition" :intensity="1.85" />
 
     <primitive
         v-if="surroundings && !analyticalViewEnabled"

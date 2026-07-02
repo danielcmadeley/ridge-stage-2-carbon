@@ -13,6 +13,7 @@ import { memberBasis } from '@/lib/portal-frame/model/member-basis';
 import { createCShapeGeometry } from '@/lib/portal-frame/rendering/geometries/c-shape-geometry';
 import { createChsShapeGeometry } from '@/lib/portal-frame/rendering/geometries/chs-shape-geometry';
 import { createZShapeGeometry } from '@/lib/portal-frame/rendering/geometries/z-shape-geometry';
+import { tagFrameMemberMesh } from '@/lib/portal-frame/rendering/member-selection';
 import {
     configurePortalFrameMeshShadows,
     createConcreteMaterial,
@@ -306,6 +307,7 @@ export function createFrameMemberMesh(member: FrameMember): Mesh {
             (start[2] + end[2]) / 2,
         );
         configurePortalFrameMeshShadows(mesh, member.role);
+        tagFrameMemberMesh(mesh, member);
 
         return mesh;
     }
@@ -320,6 +322,7 @@ export function createFrameMemberMesh(member: FrameMember): Mesh {
         const mesh = new Mesh(geometry, material);
         mesh.position.set(start[0], start[1], start[2]);
         configurePortalFrameMeshShadows(mesh, member.role);
+        tagFrameMemberMesh(mesh, member);
 
         return mesh;
     }
@@ -342,6 +345,7 @@ export function createFrameMemberMesh(member: FrameMember): Mesh {
     const mesh = new Mesh(geometry, material);
     mesh.applyMatrix4(memberPlacementMatrix(member));
     configurePortalFrameMeshShadows(mesh, member.role);
+    tagFrameMemberMesh(mesh, member);
 
     return mesh;
 }

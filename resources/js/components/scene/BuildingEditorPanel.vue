@@ -49,7 +49,10 @@ import {
     formatBuildingLocationLabel,
 } from '@/lib/building/building-statistics';
 import type { GeocodedAddress } from '@/lib/map/geocode-address';
-import type { AnalyticalForceMode } from '@/lib/portal-frame/rendering/three-group';
+import type {
+    AnalyticalForceMode,
+    AnalyticalLoadCase,
+} from '@/lib/portal-frame/rendering/three-group';
 import { buildCarbonReportTypstSource } from '@/lib/report/typst-carbon-report';
 import { deepToRaw } from '@/lib/utils';
 import {
@@ -112,6 +115,7 @@ const mapBuildingId = ref<string | null>(null);
 const isExporting = ref(false);
 const analyticalView = ref(false);
 const analyticalForceMode = ref<AnalyticalForceMode>('moment');
+const analyticalLoadCase = ref<AnalyticalLoadCase>('unfactored');
 const carbonPanelOpen = ref(true);
 const editorPanelOpen = ref(true);
 const isMobileViewport = useMediaQuery('(max-width: 768px)');
@@ -143,10 +147,17 @@ const {
     resolvedFrame,
     frameError,
     baseReactions,
+    factoredBaseReactions,
     foundationSizing,
     foundationSizingEntries,
     carbon,
 } = usePortalFrameResults(() => draft.portalFrame);
+
+const analyticalBaseReactions = computed(() =>
+    analyticalLoadCase.value === 'factored'
+        ? factoredBaseReactions.value
+        : baseReactions.value,
+);
 
 const carbonReportExport = useTypstPdfExport({
     buildSource: (paperSize) => {
@@ -924,6 +935,7 @@ function updateFoundationAssumption(
                 :draft="draft"
                 :analytical-view="analyticalView"
                 :analytical-force-mode="analyticalForceMode"
+                :analytical-load-case="analyticalLoadCase"
                 :surroundings="surroundingsGroup"
             />
         </div>
@@ -1356,6 +1368,41 @@ function updateFoundationAssumption(
                                 Force diagrams are shown on the 3D preview.
                             </p>
 
+                            <div class="grid grid-cols-2 gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    :variant="
+                                        analyticalLoadCase === 'unfactored'
+                                            ? 'default'
+                                            : 'outline'
+                                    "
+                                    @click="analyticalLoadCase = 'unfactored'"
+                                >
+                                    Unfactored
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    :variant="
+                                        analyticalLoadCase === 'factored'
+                                            ? 'default'
+                                            : 'outline'
+                                    "
+                                    @click="analyticalLoadCase = 'factored'"
+                                >
+                                    Factored (ULS)
+                                </Button>
+                            </div>
+
+                            <p class="text-xs text-muted-foreground">
+                                {{
+                                    analyticalLoadCase === 'factored'
+                                        ? `Factored: ${DEAD_LOAD_PARTIAL_FACTOR} × (dead + services) + ${LIVE_LOAD_PARTIAL_FACTOR} × live.`
+                                        : 'Unfactored: characteristic loads without partial factors.'
+                                }}
+                            </p>
+
                             <div class="grid grid-cols-3 gap-2">
                                 <Button
                                     type="button"
@@ -1396,11 +1443,16 @@ function updateFoundationAssumption(
                             </div>
 
                             <div
-                                v-if="baseReactions"
+                                v-if="analyticalBaseReactions"
                                 class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-sm"
                             >
                                 <p class="mb-1 font-medium">
-                                    Base reactions (pinned)
+                                    Base reactions (pinned,
+                                    {{
+                                        analyticalLoadCase === 'factored'
+                                            ? 'factored'
+                                            : 'unfactored'
+                                    }})
                                 </p>
                                 <div
                                     class="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-0.5"
@@ -1417,13 +1469,17 @@ function updateFoundationAssumption(
                                     >
                                     <span
                                         >{{
-                                            baseReactions.left.fxKn.toFixed(1)
+                                            analyticalBaseReactions.left.fxKn.toFixed(
+                                                1,
+                                            )
                                         }}
                                         kN</span
                                     >
                                     <span
                                         >{{
-                                            baseReactions.left.fzKn.toFixed(1)
+                                            analyticalBaseReactions.left.fzKn.toFixed(
+                                                1,
+                                            )
                                         }}
                                         kN</span
                                     >
@@ -1432,13 +1488,17 @@ function updateFoundationAssumption(
                                     >
                                     <span
                                         >{{
-                                            baseReactions.right.fxKn.toFixed(1)
+                                            analyticalBaseReactions.right.fxKn.toFixed(
+                                                1,
+                                            )
                                         }}
                                         kN</span
                                     >
                                     <span
                                         >{{
-                                            baseReactions.right.fzKn.toFixed(1)
+                                            analyticalBaseReactions.right.fzKn.toFixed(
+                                                1,
+                                            )
                                         }}
                                         kN</span
                                     >

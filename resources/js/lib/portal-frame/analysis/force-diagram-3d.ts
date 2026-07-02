@@ -15,19 +15,25 @@ import {
 } from '@/lib/portal-frame/analysis/force-diagram-geometry';
 import { FORCE_DIAGRAM_HOVER_KEY } from '@/lib/portal-frame/analysis/force-diagram-hover';
 import type { ForceDiagramHoverUserData } from '@/lib/portal-frame/analysis/force-diagram-hover';
-import { analyzePortalFrame } from '@/lib/portal-frame/analysis/frame-analysis';
-import type { MemberAnalysisResult } from '@/lib/portal-frame/analysis/frame-analysis';
+import {
+    analysisLineLoadKnMForFrame,
+    analyzePortalFrame,
+} from '@/lib/portal-frame/analysis/frame-analysis';
+import type {
+    AnalyticalLoadCase,
+    MemberAnalysisResult,
+} from '@/lib/portal-frame/analysis/frame-analysis';
 import type { FrameAnalysisResult } from '@/lib/portal-frame/analysis/frame-analysis';
 import type { BuiltPortalFrame } from '@/lib/portal-frame/model/geometry-builder';
 import { memberBasis } from '@/lib/portal-frame/model/member-basis';
 import type { FrameMember, PortalFrameDesign } from '@/types/portal-frame';
 import {
     isGableEndFrame,
-    rafterLineLoadKnMForFrame,
     representativeInteriorFrameIndex,
 } from '@/types/portal-frame';
 
 export type AnalyticalForceMode = 'shear' | 'moment' | 'axial';
+export type { AnalyticalLoadCase };
 
 const FORCE_DIAGRAM_COLOR: Record<AnalyticalForceMode, string> = {
     shear: '#dc2626',
@@ -61,6 +67,7 @@ function buildAnalysisByMemberKey(
 function buildVisualizationAnalyses(
     built: BuiltPortalFrame,
     design: PortalFrameDesign,
+    loadCase: AnalyticalLoadCase,
 ): {
     gable: Map<string, MemberAnalysisResult>;
     interior: Map<string, MemberAnalysisResult>;
@@ -69,11 +76,19 @@ function buildVisualizationAnalyses(
     const interiorFrameIndex = representativeInteriorFrameIndex(design);
     const gableAnalysis = analyzePortalFrame(built, {
         frameIndex: gableFrameIndex,
-        lineLoadKnM: rafterLineLoadKnMForFrame(design, gableFrameIndex),
+        lineLoadKnM: analysisLineLoadKnMForFrame(
+            design,
+            gableFrameIndex,
+            loadCase,
+        ),
     });
     const interiorAnalysis = analyzePortalFrame(built, {
         frameIndex: interiorFrameIndex,
-        lineLoadKnM: rafterLineLoadKnMForFrame(design, interiorFrameIndex),
+        lineLoadKnM: analysisLineLoadKnMForFrame(
+            design,
+            interiorFrameIndex,
+            loadCase,
+        ),
     });
 
     return {
@@ -244,10 +259,11 @@ export function createForceDiagramGroup(
     built: BuiltPortalFrame,
     design: PortalFrameDesign,
     mode: AnalyticalForceMode,
+    loadCase: AnalyticalLoadCase = 'unfactored',
 ): Group {
     const group = new Group();
     const { gable: gableAnalysisByKey, interior: interiorAnalysisByKey } =
-        buildVisualizationAnalyses(built, design);
+        buildVisualizationAnalyses(built, design, loadCase);
 
     const analysisForMember = (
         member: FrameMember,

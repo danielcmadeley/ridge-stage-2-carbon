@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeGoverningPortalFrame } from '@/lib/portal-frame/analysis/frame-analysis';
-import { foundationWindLoadKn } from '@/lib/portal-frame/foundation/foundation-wind-load';
 import { sizeFoundation } from '@/lib/portal-frame/foundation/foundation-sizing';
+import { foundationWindLoadKn } from '@/lib/portal-frame/foundation/foundation-wind-load';
 import { buildPortalFrame } from '@/lib/portal-frame/model/geometry-builder';
 import { defaultPortalFrameDesign } from '@/types/portal-frame';
 
@@ -18,10 +18,8 @@ describe('foundationWindLoadKn', () => {
     it('uses building height for wind rather than the frame horizontal reaction', () => {
         const design = { ...defaultPortalFrameDesign(), eavesHeight: 3 };
         const built = buildPortalFrame(design);
-        const reaction = analyzeGoverningPortalFrame(
-            built,
-            design,
-        ).reactions.left;
+        const reaction = analyzeGoverningPortalFrame(built, design).reactions
+            .left;
 
         expect(foundationWindLoadKn(design)).toBeLessThan(
             Math.abs(reaction.fxKn),
@@ -33,7 +31,8 @@ describe('foundation sizing vs eaves height', () => {
     it('shrinks reinforced pads when eaves height is reduced', () => {
         const base = defaultPortalFrameDesign();
         const built = buildPortalFrame(base);
-        const reaction = analyzeGoverningPortalFrame(built, base).reactions.left;
+        const reaction = analyzeGoverningPortalFrame(built, base).reactions
+            .left;
         const design = {
             ...base,
             foundation: {

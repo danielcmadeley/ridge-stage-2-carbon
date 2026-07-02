@@ -1,6 +1,9 @@
 import { Group, Line, Mesh, Sprite } from 'three';
 import { createForceDiagramGroup } from '@/lib/portal-frame/analysis/force-diagram-3d';
-import type { AnalyticalForceMode } from '@/lib/portal-frame/analysis/force-diagram-3d';
+import type {
+    AnalyticalForceMode,
+    AnalyticalLoadCase,
+} from '@/lib/portal-frame/analysis/force-diagram-3d';
 import { adjustMembersForAnalysis } from '@/lib/portal-frame/model/analytical-adjustments';
 import {
     buildPortalFrame,
@@ -16,7 +19,7 @@ import { createStickAnalysisGroup } from '@/lib/portal-frame/rendering/stick-mod
 import type { PortalFrameDesign } from '@/types/portal-frame';
 
 export type PortalFrameViewMode = 'solid' | 'analytical';
-export type { AnalyticalForceMode };
+export type { AnalyticalForceMode, AnalyticalLoadCase };
 
 function disposeObject3D(object: Group): void {
     object.traverse((child) => {
@@ -41,6 +44,7 @@ export function buildPortalFrameThreeGroup(
     design: PortalFrameDesign,
     viewMode: PortalFrameViewMode = 'solid',
     forceMode: AnalyticalForceMode = 'moment',
+    loadCase: AnalyticalLoadCase = 'unfactored',
 ): Group {
     const built = buildPortalFrame(design);
     const group = new Group();
@@ -49,7 +53,13 @@ export function buildPortalFrameThreeGroup(
         const analysisMembers = adjustMembersForAnalysis(built.members, design);
         group.add(createStickAnalysisGroup(analysisMembers));
         group.add(
-            createForceDiagramGroup(built.members, built, design, forceMode),
+            createForceDiagramGroup(
+                built.members,
+                built,
+                design,
+                forceMode,
+                loadCase,
+            ),
         );
     } else {
         const renderMembers = adjustMembersForRendering(built.members);
@@ -81,12 +91,13 @@ export function replacePortalFrameThreeGroup(
     design: PortalFrameDesign,
     viewMode: PortalFrameViewMode = 'solid',
     forceMode: AnalyticalForceMode = 'moment',
+    loadCase: AnalyticalLoadCase = 'unfactored',
 ): Group {
     if (current) {
         disposeObject3D(current);
     }
 
-    return buildPortalFrameThreeGroup(design, viewMode, forceMode);
+    return buildPortalFrameThreeGroup(design, viewMode, forceMode, loadCase);
 }
 
 export function portalFramePreviewMetrics(design: PortalFrameDesign): {

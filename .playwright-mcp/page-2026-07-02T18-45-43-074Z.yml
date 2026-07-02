@@ -1,0 +1,82 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - link "Ridge" [ref=e6] [cursor=pointer]:
+        - /url: https://ridge.co.uk/
+        - img "Ridge" [ref=e7]
+      - navigation [ref=e8]:
+        - link "Log in" [ref=e9] [cursor=pointer]:
+          - /url: /login
+        - link "Get started" [ref=e10] [cursor=pointer]:
+          - /url: /register
+  - main [ref=e11]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - paragraph [ref=e15]: Stage 2 portal frame tool
+        - heading "Design portal frames and quantify carbon in one workflow" [level=1] [ref=e16]:
+          - text: Design portal frames and quantify
+          - emphasis [ref=e17]: carbon
+          - text: in one workflow
+        - paragraph [ref=e18]: Configure steel portal frames, place them on real UK sites, analyse structure in 3D, and produce carbon outputs — then save your work into projects and iterate across design schemes.
+        - generic [ref=e19]:
+          - link "Create free account" [ref=e20] [cursor=pointer]:
+            - /url: /register
+            - text: Create free account
+            - img [ref=e21]
+          - link "Log in" [ref=e23] [cursor=pointer]:
+            - /url: /login
+      - generic [ref=e24]:
+        - figure [ref=e26]:
+          - img "Portal frame tool showing a 3D steel frame model with embodied carbon analysis and frame property controls" [ref=e27]
+        - generic [ref=e28]:
+          - generic [ref=e29]: 166 tCO2e embodied carbon
+          - generic [ref=e30]: 24 m span · 960 m²
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - heading "Everything you need for early-stage frame design" [level=2] [ref=e34]
+        - paragraph [ref=e35]: From geometry and section sizing to carbon reporting, the workflow stays in one place.
+      - generic [ref=e36]:
+        - article [ref=e37]:
+          - img [ref=e39]
+          - heading "Configure portal frames" [level=3] [ref=e45]
+          - paragraph [ref=e46]: Set span, eaves height, and structural options, then resolve steel sections automatically.
+        - article [ref=e47]:
+          - img [ref=e49]
+          - heading "Place buildings on site" [level=3] [ref=e52]
+          - paragraph [ref=e53]: Search UK addresses and preview your frame in context with nearby surroundings.
+        - article [ref=e54]:
+          - img [ref=e56]
+          - heading "Explore in 3D" [level=3] [ref=e59]
+          - paragraph [ref=e60]: Inspect geometry, force diagrams, and structural behaviour in an interactive scene.
+        - article [ref=e61]:
+          - img [ref=e63]
+          - heading "Save projects & schemes" [level=3] [ref=e65]
+          - paragraph [ref=e66]: Organise buildings into projects and save design schemes you can revisit, compare, and refine.
+        - article [ref=e67]:
+          - img [ref=e69]
+          - heading "Estimate embodied carbon" [level=3] [ref=e72]
+          - paragraph [ref=e73]: Calculate carbon quantities across the frame and export reports for your project.
+        - article [ref=e74]:
+          - img [ref=e76]
+          - heading "Export deliverables" [level=3] [ref=e81]
+          - paragraph [ref=e82]: Generate carbon reports and IFC models ready to share with your team.
+    - generic [ref=e84]:
+      - generic [ref=e85]:
+        - heading "Ready to model your next portal frame?" [level=2] [ref=e86]
+        - paragraph [ref=e87]: Sign in to continue a project or create an account to start from a blank frame.
+      - generic [ref=e88]:
+        - link "Get started" [ref=e89] [cursor=pointer]:
+          - /url: /register
+          - text: Get started
+          - img [ref=e90]
+        - link "Log in" [ref=e92] [cursor=pointer]:
+          - /url: /login
+  - contentinfo [ref=e93]:
+    - generic [ref=e94]:
+      - generic [ref=e95]:
+        - img "Ridge" [ref=e96]
+        - generic [ref=e97]: Portal frame design and carbon
+      - generic [ref=e98]:
+        - generic [ref=e99]: Established 1946
+        - link "ridge.co.uk" [ref=e100] [cursor=pointer]:
+          - /url: https://ridge.co.uk/

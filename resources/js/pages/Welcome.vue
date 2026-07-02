@@ -187,7 +187,7 @@ const features = [
                         />
 
                         <figure
-                            class="bg-ridge-grey relative overflow-hidden rounded-xl border border-ridge-green/10 shadow-[0_24px_80px_rgba(0,55,35,0.18)] md:rounded-2xl"
+                            class="relative overflow-hidden rounded-xl border border-ridge-green/10 bg-ridge-grey shadow-[0_24px_80px_rgba(0,55,35,0.18)] md:rounded-2xl"
                         >
                             <img
                                 src="/chrome_VYzu6urFdG.png"

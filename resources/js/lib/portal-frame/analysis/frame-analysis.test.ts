@@ -8,6 +8,7 @@ import { memberLengthM } from '@/lib/portal-frame/model/member-basis';
 import { findUbSection } from '@/lib/portal-frame/sections/ub-sections';
 import {
     defaultPortalFrameDesign,
+    factoredRafterLineLoadKnMForFrame,
     rafterLineLoadKnMForFrame,
 } from '@/types/portal-frame';
 
@@ -277,6 +278,41 @@ describe('analyzePortalFrame', () => {
         expect(lightResult.apexHorizontalDisplacementM).toBeCloseTo(0, 3);
         expect(Math.abs(heavyResult.apexVerticalDisplacementM)).toBeLessThan(
             Math.abs(lightResult.apexVerticalDisplacementM),
+        );
+    });
+
+    it('scales reactions and moments by the ULS ratio for the factored load case', () => {
+        const design = defaultPortalFrameDesign();
+        const built = buildPortalFrame(design);
+        const unfactored = analyzeGoverningPortalFrame(built, design);
+        const factored = analyzeGoverningPortalFrame(built, design, 'factored');
+        const ratio =
+            factoredRafterLineLoadKnMForFrame(design, 1) /
+            rafterLineLoadKnMForFrame(design, 1);
+
+        // ULS factors always amplify the characteristic load.
+        expect(ratio).toBeGreaterThan(1);
+
+        // Linear elastic analysis: every result scales with the line load.
+        expect(factored.reactions.left.fzKn).toBeCloseTo(
+            unfactored.reactions.left.fzKn * ratio,
+            3,
+        );
+        expect(factored.reactions.right.fxKn).toBeCloseTo(
+            unfactored.reactions.right.fxKn * ratio,
+            3,
+        );
+
+        const unfactoredColumn = unfactored.members.find(
+            (member) => member.id === 'frame-1-column-left',
+        );
+        const factoredColumn = factored.members.find(
+            (member) => member.id === 'frame-1-column-left',
+        );
+
+        expect(factoredColumn!.momentKnm.at(-1)).toBeCloseTo(
+            unfactoredColumn!.momentKnm.at(-1)! * ratio,
+            3,
         );
     });
 

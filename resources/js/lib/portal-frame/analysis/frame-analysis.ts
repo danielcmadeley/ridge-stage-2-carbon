@@ -6,6 +6,7 @@ import type {
     UbSectionDimensions,
 } from '@/types/portal-frame';
 import {
+    factoredRafterLineLoadKnMForFrame,
     rafterLineLoadKnMForFrame,
     representativeInteriorFrameIndex,
 } from '@/types/portal-frame';
@@ -49,6 +50,20 @@ export type FrameAnalysisOptions = {
     frameIndex?: number;
     lineLoadKnM?: number;
 };
+
+/** Load case for analytical results: characteristic or ULS factored. */
+export type AnalyticalLoadCase = 'unfactored' | 'factored';
+
+/** Per-frame rafter line load for the requested load case, kN/m. */
+export function analysisLineLoadKnMForFrame(
+    design: PortalFrameDesign,
+    frameIndex: number,
+    loadCase: AnalyticalLoadCase,
+): number {
+    return loadCase === 'factored'
+        ? factoredRafterLineLoadKnMForFrame(design, frameIndex)
+        : rafterLineLoadKnMForFrame(design, frameIndex);
+}
 
 type Node2D = {
     id: number;
@@ -625,11 +640,12 @@ export function analyzePortalFrame(
 export function analyzeGoverningPortalFrame(
     built: BuiltPortalFrame,
     design: PortalFrameDesign,
+    loadCase: AnalyticalLoadCase = 'unfactored',
 ): FrameAnalysisResult {
     const frameIndex = representativeInteriorFrameIndex(design);
 
     return analyzePortalFrame(built, {
         frameIndex,
-        lineLoadKnM: rafterLineLoadKnMForFrame(design, frameIndex),
+        lineLoadKnM: analysisLineLoadKnMForFrame(design, frameIndex, loadCase),
     });
 }

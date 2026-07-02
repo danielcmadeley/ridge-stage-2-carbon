@@ -8,6 +8,7 @@ import {
     createTaperedTopAnchoredIShapeGeometry,
     memberPlacementMatrix,
 } from '@/lib/portal-frame/rendering/geometries/i-shape-geometry';
+import { tagFrameMemberMesh } from '@/lib/portal-frame/rendering/member-selection';
 import {
     configurePortalFrameMeshShadows,
     createRedOxideSteelMaterial,
@@ -80,6 +81,7 @@ export function createEavesHaunchMesh(
     const mesh = new Mesh(geometry, material);
     mesh.applyMatrix4(memberPlacementMatrix(haunch));
     configurePortalFrameMeshShadows(mesh);
+    tagFrameMemberMesh(mesh, haunch);
 
     return mesh;
 }

@@ -39,10 +39,7 @@ type ChartDatum = {
     carbonKg: number;
 };
 
-function groupElementChartData(
-    elements: ChartDatum[],
-    topN = 7,
-): ChartDatum[] {
+function groupElementChartData(elements: ChartDatum[], topN = 7): ChartDatum[] {
     const ranked = [...elements]
         .filter((element) => element.carbonKg > 0)
         .sort((left, right) => right.carbonKg - left.carbonKg);
@@ -58,10 +55,7 @@ function groupElementChartData(
     return top;
 }
 
-function typstChartLegend(
-    items: ChartDatum[],
-    totalCarbonKg: number,
-): string {
+function typstChartLegend(items: ChartDatum[], totalCarbonKg: number): string {
     if (items.length === 0) {
         return '';
     }
@@ -69,9 +63,7 @@ function typstChartLegend(
     const rows = items
         .map((item, index) => {
             const share =
-                totalCarbonKg > 0
-                    ? (item.carbonKg / totalCarbonKg) * 100
-                    : 0;
+                totalCarbonKg > 0 ? (item.carbonKg / totalCarbonKg) * 100 : 0;
             const color =
                 CHART_CATEGORICAL_PALETTE[
                     index % CHART_CATEGORICAL_PALETTE.length

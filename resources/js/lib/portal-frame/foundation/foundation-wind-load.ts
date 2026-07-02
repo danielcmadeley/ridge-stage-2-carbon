@@ -22,8 +22,6 @@ export function foundationWindLoadKn(design: PortalFrameDesign): number {
     const tributaryWidthM = design.baySpacing;
 
     return (
-        FOUNDATION_REFERENCE_WIND_PRESSURE_KN_M2 *
-        meanHeightM *
-        tributaryWidthM
+        FOUNDATION_REFERENCE_WIND_PRESSURE_KN_M2 * meanHeightM * tributaryWidthM
     );
 }

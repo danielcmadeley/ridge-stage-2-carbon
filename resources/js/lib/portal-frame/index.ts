@@ -41,6 +41,7 @@ export {
     analyzeGoverningPortalFrame,
 } from '@/lib/portal-frame/analysis/frame-analysis';
 export type {
+    AnalyticalLoadCase,
     FrameAnalysisOptions,
     FrameAnalysisResult,
     MemberAnalysisResult,

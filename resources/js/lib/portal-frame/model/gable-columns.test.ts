@@ -33,9 +33,9 @@ describe('gableColumnXPositions', () => {
             expect(positions.at(-1)).toBeCloseTo(halfSpan, 9);
 
             for (let index = 1; index < positions.length; index += 1) {
-                expect(positions[index] - positions[index - 1]).toBeLessThanOrEqual(
-                    GABLE_COLUMN_SPACING_M + 1e-9,
-                );
+                expect(
+                    positions[index] - positions[index - 1],
+                ).toBeLessThanOrEqual(GABLE_COLUMN_SPACING_M + 1e-9);
             }
 
             const centreIndex = positions.findIndex((x) => Math.abs(x) < 1e-9);
@@ -54,8 +54,13 @@ describe('gableColumnXPositions', () => {
 
         expect(positions).toHaveLength(7);
         expect(positions).toEqual([
-            -3 * spacing, -2 * spacing, -spacing, 0,
-            spacing, 2 * spacing, 3 * spacing,
+            -3 * spacing,
+            -2 * spacing,
+            -spacing,
+            0,
+            spacing,
+            2 * spacing,
+            3 * spacing,
         ]);
     });
 });
