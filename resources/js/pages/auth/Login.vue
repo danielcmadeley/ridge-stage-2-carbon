@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
-import InputError from '@/components/InputError.vue';
-import PasswordInput from '@/components/PasswordInput.vue';
-import TeamInvitationAlert from '@/components/TeamInvitationAlert.vue';
-import TextLink from '@/components/TextLink.vue';
+import InputError from '@/components/shared/InputError.vue';
+import PasswordInput from '@/components/shared/PasswordInput.vue';
+import TextLink from '@/components/shared/TextLink.vue';
+import TeamInvitationAlert from '@/components/teams/TeamInvitationAlert.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';

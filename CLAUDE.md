@@ -1,3 +1,36 @@
+# Ridge — Portal Frame Designer (Stage 2, v3)
+
+Laravel 13 + Inertia v3 + Vue 3 SPA for designing steel portal frame buildings and comparing design schemes by embodied carbon.
+
+## Domain model
+
+- Hierarchy: **team → projects → buildings → schemes**. Teams double as organisations (there is no separate `organisations` table).
+- A **building** belongs to a project and has an *optional* map location (`latitude`/`longitude` are nullable — a building can be saved before it is placed on the map). `buildings.preferred_scheme_id` points at the last-saved scheme.
+- A **scheme** is one design option for a building: design inputs (span, eaves height, loads, foundation type…) plus a frontend-computed snapshot (`frame_members`, `foundations`, `carbon_data`) and carbon rollups. Schemes are compared by `carbon_intensity_kg_m2`.
+- Scheme `status` is `draft` / `verified` / `archived` (`App\Enums\SchemeStatus`). **Only one scheme per building can be verified** — verifying via `SchemeController::update` demotes siblings and records `verified_by`. The `Scheme::verifiedFirst()` scope orders the verified scheme first; Dashboard and Scene controllers rely on it.
+
+## Architecture constraints (deliberate — do not "fix")
+
+- **All engineering compute runs in the browser** (`resources/js/lib/portal-frame`: geometry, section lookup, FEA, foundations, carbon). The server never recomputes results for display.
+- **The DB is written only on an explicit Save**: `POST {team}/projects/{project}/schemes` → `SaveSchemeController` → `App\Actions\Schemes\SaveScheme`, which trusts the frontend-computed snapshot and replaces `frame_members`/`foundations`/`carbon_data` wholesale.
+- **Scheme-only save**: a Save payload whose `building` carries only an `id` (no name/location/rotation) updates the scheme and leaves the building untouched. `SaveScheme::upsertBuilding` only fills keys present in the payload. The scene toolbar Save button uses this path once a building is persisted; the save dialog is only for the first save.
+- **Section catalogs stay as CSVs** in `data/` (`ub-sections.csv`, `chs_sections.csv`, `carbon_factors.csv`, `p399-portal-frame-data.csv`, …), read by both the PHP services (`app/Services/PortalFrame/*Catalog.php`) and the TS engine. Do not migrate them into DB tables.
+- **Routes are team-scoped**: everything lives under `/{current_team}/…` behind `EnsureTeamMembership`. The dashboard is `Route::get('/', DashboardController::class)` inside that prefix; custom Fortify responses (`app/Http/Responses`) redirect to the current team's dashboard after login.
+
+## Where things live
+
+- Backend: `app/Actions/Schemes/SaveScheme.php` (save flow), `app/Services/PortalFrame/` (geometry + P399 section lookup), `app/Http/Resources/` (Project/Building/Scheme shapes — mirrored by the TS types in `resources/js/types/scene.ts`), `app/Services/ExportBuildingIfc.php` (IFC export).
+- Frontend: pages in `resources/js/pages` (`Dashboard.vue`, `Scene.vue`); the scene editor UI in `resources/js/components/scene` (`BuildingEditorPanel.vue` is the main editor); MapLibre map in `resources/js/lib/map` + `useUkMap3d`; save client in `resources/js/lib/building/save-scheme.ts`; Typst PDF reports via `useTypstPdfExport`.
+- Buildings without a location are excluded from map rendering via `isPlacedOnMap()` (`resources/js/types/custom-building.ts`) — keep that guard when touching map code.
+
+## Commands
+
+- `composer run dev` — serve + queue + logs + Vite together; `composer run setup` for first-time install.
+- `bun run build` / `bun run dev`; `bun run types:check` (vue-tsc); `bun run lint` / `bun run format`; `bun run test:unit` (vitest, colocated `*.test.ts`).
+- `php artisan test --compact` (Pest), scoped to a file or `--filter` where possible.
+- `vendor/bin/pint --dirty --format agent` after PHP changes.
+- `vendor/bin/phpstan analyse --memory-limit=1G` — the default 128M memory limit crashes the run.
+
 <laravel-boost-guidelines>
 === foundation rules ===
 

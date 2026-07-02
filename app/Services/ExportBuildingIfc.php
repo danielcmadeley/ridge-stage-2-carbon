@@ -22,6 +22,7 @@ class ExportBuildingIfc
      *     buildingLength: float|int,
      *     baySpacing: float|int,
      *     deadLoadKnM2: float|int,
+     *     servicesLoadKnM2?: float|int,
      *     liveLoadKnM2: float|int,
      *     columnRestraint: 'restrained'|'unrestrained',
      *     roofPitchDeg?: float|int,

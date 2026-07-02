@@ -2,9 +2,9 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { Eye, LogOut, Pencil, Plus } from '@lucide/vue';
 import { ref } from 'vue';
-import CreateTeamModal from '@/components/CreateTeamModal.vue';
-import Heading from '@/components/Heading.vue';
-import LeaveTeamModal from '@/components/LeaveTeamModal.vue';
+import Heading from '@/components/shared/Heading.vue';
+import CreateTeamModal from '@/components/teams/CreateTeamModal.vue';
+import LeaveTeamModal from '@/components/teams/LeaveTeamModal.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {

@@ -6,8 +6,8 @@ import {
     downloadPdf,
     extractTypstError,
     revokePdfPreviewUrl,
-} from '@/lib/typst';
-import type { TypstPaperSize } from '@/lib/typst-paper-size';
+} from '@/lib/report/typst';
+import type { TypstPaperSize } from '@/lib/report/typst-paper-size';
 
 export type UseTypstPdfExportOptions = {
     buildSource: (paperSize: TypstPaperSize) => string;
@@ -58,7 +58,9 @@ export function useTypstPdfExport(
         clearPdfPreview();
 
         try {
-            const pdfData = await compilePdf(options.buildSource(paperSize.value));
+            const pdfData = await compilePdf(
+                options.buildSource(paperSize.value),
+            );
             pendingPdfData.value = pdfData;
             pdfPreviewUrl.value = createPdfPreviewUrl(pdfData);
         } catch (exception) {

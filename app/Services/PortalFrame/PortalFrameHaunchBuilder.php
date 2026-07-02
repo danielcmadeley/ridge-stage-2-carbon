@@ -16,7 +16,7 @@ class PortalFrameHaunchBuilder
      * @param  list<FrameMember>  $renderMembers
      * @return list<FrameMember>
      */
-    public function build(array $analysisMembers, array $renderMembers): array
+    public function build(array $analysisMembers, array $renderMembers, float $spanM): array
     {
         /** @var array<string, FrameMember> $analysisRafters */
         $analysisRafters = [];
@@ -40,17 +40,17 @@ class PortalFrameHaunchBuilder
                 continue;
             }
 
-            $haunches[] = $this->buildForRafter($renderRafter, $analysisRafter);
+            $haunches[] = $this->buildForRafter($renderRafter, $spanM);
         }
 
         return $haunches;
     }
 
-    public function buildForRafter(FrameMember $renderRafter, FrameMember $analysisRafter): FrameMember
+    public function buildForRafter(FrameMember $renderRafter, float $spanM): FrameMember
     {
         $basis = MemberBasis::fromMember($renderRafter);
         $rafterHalfDepthM = $renderRafter->section->h / 2000;
-        $haunchLengthM = MemberBasis::fromMember($analysisRafter)->lengthM * self::HAUNCH_LENGTH_FRACTION;
+        $haunchLengthM = $spanM * self::HAUNCH_LENGTH_FRACTION;
 
         $start = MemberBasis::subtract(
             $basis->start,

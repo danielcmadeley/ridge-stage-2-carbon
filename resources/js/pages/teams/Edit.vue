@@ -2,12 +2,12 @@
 import { Form, Head, router } from '@inertiajs/vue3';
 import { ChevronDown, Mail, UserPlus, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import CancelInvitationModal from '@/components/CancelInvitationModal.vue';
-import DeleteTeamModal from '@/components/DeleteTeamModal.vue';
-import Heading from '@/components/Heading.vue';
-import InputError from '@/components/InputError.vue';
-import InviteMemberModal from '@/components/InviteMemberModal.vue';
-import RemoveMemberModal from '@/components/RemoveMemberModal.vue';
+import Heading from '@/components/shared/Heading.vue';
+import InputError from '@/components/shared/InputError.vue';
+import CancelInvitationModal from '@/components/teams/CancelInvitationModal.vue';
+import DeleteTeamModal from '@/components/teams/DeleteTeamModal.vue';
+import InviteMemberModal from '@/components/teams/InviteMemberModal.vue';
+import RemoveMemberModal from '@/components/teams/RemoveMemberModal.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

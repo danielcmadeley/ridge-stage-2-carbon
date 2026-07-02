@@ -56,16 +56,11 @@ class P399SectionLookup
 
         $lookupLineLoad = $this->snapUpToTabulated($lineLoadKnM, $this->lineLoadsKnM);
 
+        // Factored (ULS) line loads can exceed the tabulated preliminary-sizing
+        // range; clamp to the heaviest tabulated entry so the heaviest available
+        // section is returned rather than aborting the export.
         if ($lookupLineLoad === null) {
-            $maxLineLoad = $this->lineLoadsKnM[array_key_last($this->lineLoadsKnM)];
-
-            throw new InvalidArgumentException(
-                sprintf(
-                    'P399 covers rafter line loads up to %g kN/m; %.2f kN/m is out of scope.',
-                    $maxLineLoad,
-                    $lineLoadKnM,
-                ),
-            );
+            $lookupLineLoad = $this->lineLoadsKnM[array_key_last($this->lineLoadsKnM)];
         }
 
         $lookupEavesHeight = $this->snapUpToTabulated($eavesHeightM, $this->eavesHeightsM);

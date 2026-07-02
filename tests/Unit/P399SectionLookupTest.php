@@ -87,20 +87,27 @@ test('portal frame geometry resolves sections for a non-tabulated eaves height',
         buildingLength: 40.0,
         baySpacing: 5.0,
         deadLoadKnM2: 1.25,
+        servicesLoadKnM2: 0.25,
         liveLoadKnM2: 0.75,
         columnRestraint: 'restrained',
     );
 
     $result = portalFrameServices()->build($design);
 
-    expect($result['rafter']->name)->toBe('UB 356x171x45')
-        ->and($result['column']->name)->toBe('UB 457x191x82');
+    // Section lookup now runs on the ULS factored line load
+    // (y_G.(dead+services) + y_Q.live) x bay = (1.35.1.5 + 1.5.0.75).5 = 15.75
+    // -> snaps to the 16 kN/m row, so a heavier rafter/column is selected.
+    expect($result['rafter']->name)->toBe('UB 356x171x67')
+        ->and($result['column']->name)->toBe('UB 533x210x101');
 });
 
 test('portal frame geometry resolves screenshot example sections', function () {
     $result = portalFrameServices()->build(PortalFrameDesign::defaults());
 
-    expect($result['rafterLineLoadKnM'])->toBe(10.0)
+    // Default loads (dead 0.30 + services 0.25 + live 0.60) kN/m2 over a 5 m
+    // bay give a 5.75 kN/m characteristic line load (returned here) and an
+    // 8.21 kN/m factored line load (used for section lookup -> snaps to 10).
+    expect($result['rafterLineLoadKnM'])->toBe(5.75)
         ->and($result['lookupSpanM'])->toBe(25)
         ->and($result['rafter']->name)->toBe('UB 356x171x45')
         ->and($result['column']->name)->toBe('UB 406x178x74');

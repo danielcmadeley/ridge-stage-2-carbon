@@ -55,12 +55,17 @@ class PortalFrameGeometryBuilder
             throw new InvalidArgumentException('Bay spacing must be greater than zero.');
         }
 
-        $rafterLineLoad = $design->rafterLineLoadKnM();
+        // Section lookup uses the ULS FACTORED line load (γ_G·(dead+services) + γ_Q·live),
+        // so the chosen sections resist factored actions. The returned
+        // rafterLineLoadKnM stays characteristic (used downstream as the
+        // analysis default).
+        $factoredLineLoad = $design->factoredRafterLineLoadKnM();
+        $characteristicLineLoad = $design->rafterLineLoadKnM();
         $lookupSpan = $this->p399Lookup->snapSpan($design->span);
 
         $rafterDesignation = $this->p399Lookup->lookup(
             'Rafter',
-            $rafterLineLoad,
+            $factoredLineLoad,
             $design->eavesHeight,
             $design->span,
         );
@@ -71,7 +76,7 @@ class PortalFrameGeometryBuilder
 
         $columnDesignation = $this->p399Lookup->lookup(
             $columnMemberType,
-            $rafterLineLoad,
+            $factoredLineLoad,
             $design->eavesHeight,
             $design->span,
         );
@@ -99,7 +104,7 @@ class PortalFrameGeometryBuilder
         ];
 
         return [
-            'rafterLineLoadKnM' => $rafterLineLoad,
+            'rafterLineLoadKnM' => $characteristicLineLoad,
             'lookupSpanM' => $lookupSpan,
             'rafter' => $rafterSection,
             'column' => $columnSection,

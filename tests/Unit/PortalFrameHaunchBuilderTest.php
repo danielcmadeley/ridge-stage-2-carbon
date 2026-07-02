@@ -57,10 +57,12 @@ test('builds one eaves haunch per rafter for export', function () {
     expect($resolved['haunches'])->toHaveCount($rafterCount);
     expect($resolved['haunches'][0]['id'])->toBe('frame-0-haunch-left');
     expect($resolved['haunches'][0]['role'])->toBe('haunch');
-    expect($resolved['haunches'][0]['section']['name'])->toBe('UB 356x171x45');
+    // fromArray defaults services to 0; with dead 1.25 + live 0.75 the ULS
+    // factored line load is (1.35·1.25 + 1.5·0.75)·5 = 12 kN/m → 356x171x67.
+    expect($resolved['haunches'][0]['section']['name'])->toBe('UB 356x171x67');
 });
 
-test('uses the rafter UB section and 10% length for haunches', function () {
+test('uses the rafter UB section and 10% of span for haunches', function () {
     $design = PortalFrameDesign::fromArray([
         'span' => 24,
         'eavesHeight' => 6,
@@ -80,7 +82,6 @@ test('uses the rafter UB section and 10% length for haunches', function () {
         static fn (array $member): bool => $member['id'] === 'frame-0-haunch-left',
     );
 
-    $analysisLength = 12 / cos(deg2rad(6));
     $haunchLength = sqrt(
         ($haunch['end'][0] - $haunch['start'][0]) ** 2
         + ($haunch['end'][1] - $haunch['start'][1]) ** 2
@@ -92,7 +93,7 @@ test('uses the rafter UB section and 10% length for haunches', function () {
         0.000001,
     );
     expect($haunchLength)->toEqualWithDelta(
-        $analysisLength * PortalFrameHaunchBuilder::HAUNCH_LENGTH_FRACTION,
+        $design->span * PortalFrameHaunchBuilder::HAUNCH_LENGTH_FRACTION,
         0.000001,
     );
 });

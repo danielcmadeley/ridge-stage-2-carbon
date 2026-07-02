@@ -55,7 +55,7 @@ class PortalFrameDesignResolver
         $built = $this->geometryBuilder->build($design);
         $analysisMembers = $built['members'];
         $renderMembers = $this->renderAdjustments->adjust($analysisMembers);
-        $haunches = $this->haunchBuilder->build($analysisMembers, $renderMembers);
+        $haunches = $this->haunchBuilder->build($analysisMembers, $renderMembers, $design->span);
 
         return [
             'design' => $design->toArray(),

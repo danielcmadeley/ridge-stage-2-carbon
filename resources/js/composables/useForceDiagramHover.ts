@@ -1,12 +1,13 @@
 import { useTresContext } from '@tresjs/core';
 import type { Group } from 'three';
 import { Raycaster, Vector2, Vector3 } from 'three';
-import { computed, onUnmounted, ref, watch, type ComputedRef, type ShallowRef } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
+import type { ComputedRef, ShallowRef } from 'vue';
 import {
     collectForceDiagramObjects,
     resolveForceDiagramHover,
-    type ForceDiagramHoverInfo,
-} from '@/lib/portal-frame/force-diagram-hover';
+} from '@/lib/portal-frame/analysis/force-diagram-hover';
+import type { ForceDiagramHoverInfo } from '@/lib/portal-frame/analysis/force-diagram-hover';
 
 type UseForceDiagramHoverOptions = {
     enabled: ComputedRef<boolean>;
@@ -23,7 +24,9 @@ export function useForceDiagramHover(options: UseForceDiagramHoverOptions): {
     const pointer = new Vector2();
     const localPoint = new Vector3();
 
-    const diagramTargets = computed(() => collectForceDiagramObjects(options.frameGroup.value));
+    const diagramTargets = computed(() =>
+        collectForceDiagramObjects(options.frameGroup.value),
+    );
 
     watch(
         () => options.enabled.value,
@@ -42,7 +45,10 @@ export function useForceDiagramHover(options: UseForceDiagramHoverOptions): {
     );
 
     watch(
-        [() => options.enabled.value, () => renderer.instance.domElement] as const,
+        [
+            () => options.enabled.value,
+            () => renderer.instance.domElement,
+        ] as const,
         ([enabled, domElement], _, onCleanup) => {
             if (!enabled) {
                 return;
@@ -58,6 +64,7 @@ export function useForceDiagramHover(options: UseForceDiagramHoverOptions): {
 
                 if (!activeCamera || targets.length === 0) {
                     clearHover();
+
                     return;
                 }
 
@@ -65,6 +72,7 @@ export function useForceDiagramHover(options: UseForceDiagramHoverOptions): {
 
                 if (rect.width === 0 || rect.height === 0) {
                     clearHover();
+
                     return;
                 }
 
@@ -74,10 +82,14 @@ export function useForceDiagramHover(options: UseForceDiagramHoverOptions): {
                 raycaster.setFromCamera(pointer, activeCamera);
                 raycaster.params.Line.threshold = options.lineThresholdM.value;
 
-                const intersections = raycaster.intersectObjects(targets, false);
+                const intersections = raycaster.intersectObjects(
+                    targets,
+                    false,
+                );
 
                 if (intersections.length === 0) {
                     clearHover();
+
                     return;
                 }
 

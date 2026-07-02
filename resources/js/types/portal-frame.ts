@@ -2,13 +2,36 @@ export type ColumnRestraint = 'restrained' | 'unrestrained';
 
 export type FoundationType = 'two_pile_cap' | 'reinforced_pad' | 'mass_filled';
 
+/** EC0 partial safety factor for permanent (dead + services) actions, γ_G. */
+export const DEAD_LOAD_PARTIAL_FACTOR = 1.35;
+/** EC0 partial safety factor for variable (live/wind) actions, γ_Q. */
+export const LIVE_LOAD_PARTIAL_FACTOR = 1.5;
+
 export type FoundationAssumptions = {
     allowableBearingKpa: number;
     pileWorkingCapacityKn: number;
     pileDiameterM: number;
     pileSpacingFactor: number;
+    pileDepthM: number;
     concreteDensityKnM3: number;
     soilCoverDensityKnM3: number;
+    /** Effective soil friction angle φ' (degrees), EC7 characteristic. */
+    effectiveFrictionAngleDeg: number;
+    /** Soil– concrete interface friction angle δ (degrees). */
+    interfaceFrictionAngleDeg: number;
+    /** Retained soil depth over the pad (m). */
+    retainedSoilDepthM: number;
+    /** Drained soil Young's modulus (kN/m²), immediate-settlement estimate. */
+    soilModulusKnM2: number;
+    /** Characteristic concrete cylinder strength fck (N/mm²). */
+    concreteStrengthMpa: number;
+    /** Pile-cap edge overhang past the pile face (mm). */
+    capOverhangMm: number;
+    /** Stage-2 reinforcement rate for pile caps (kg/m³). */
+    rebarRateKgM3: number;
+    /** Reinforcement mass uplift factor applied to pad bottom+top mesh. */
+    rebarUpliftFactor: number;
+    /** @deprecated replaced by interfaceFrictionAngleDeg; kept for back-compat. */
     frictionCoefficient: number;
     concreteCoverM: number;
     reinforcementYieldStrengthMpa: number;
@@ -25,7 +48,11 @@ export type PortalFrameDesign = {
     eavesHeight: number;
     buildingLength: number;
     baySpacing: number;
+    /** Permanent dead (self-weight + structure), factored by γ_G. */
     deadLoadKnM2: number;
+    /** Permanent services (M&E / ceilings), factored by γ_G alongside dead. */
+    servicesLoadKnM2: number;
+    /** Variable imposed live load, factored by γ_Q. */
     liveLoadKnM2: number;
     columnRestraint: ColumnRestraint;
     roofPitchDeg: number;
@@ -133,17 +160,26 @@ export type ResolvedPortalFrameSections = {
 
 export const PORTAL_FRAME_TABULATED_SPANS = [15, 20, 25, 30, 35, 40] as const;
 
-export const PORTAL_FRAME_STEEL_COLOR = '#dc2626';
-export const PORTAL_FRAME_SECONDARY_STEEL_COLOR = '#9ca3af';
-export const PORTAL_FRAME_FOUNDATION_COLOR = '#d1d5db';
+export const PORTAL_FRAME_STEEL_COLOR = '#b8472b';
+export const PORTAL_FRAME_SECONDARY_STEEL_COLOR = '#b5bec7';
+export const PORTAL_FRAME_FOUNDATION_COLOR = '#9c968e';
 
 export const defaultFoundationAssumptions = (): FoundationAssumptions => ({
     allowableBearingKpa: 150,
     pileWorkingCapacityKn: 300,
     pileDiameterM: 0.45,
     pileSpacingFactor: 3,
+    pileDepthM: 6,
     concreteDensityKnM3: 24,
     soilCoverDensityKnM3: 18,
+    effectiveFrictionAngleDeg: 30,
+    interfaceFrictionAngleDeg: 20,
+    retainedSoilDepthM: 0.6,
+    soilModulusKnM2: 25_000,
+    concreteStrengthMpa: 28,
+    capOverhangMm: 150,
+    rebarRateKgM3: 110,
+    rebarUpliftFactor: 1.1,
     frictionCoefficient: 0.45,
     concreteCoverM: 0.05,
     reinforcementYieldStrengthMpa: 500,
@@ -160,20 +196,50 @@ export const defaultPortalFrameDesign = (): PortalFrameDesign => ({
     eavesHeight: 6,
     buildingLength: 40,
     baySpacing: 5,
-    deadLoadKnM2: 1.25,
-    liveLoadKnM2: 0.75,
+    deadLoadKnM2: 0.3,
+    servicesLoadKnM2: 0.25,
+    liveLoadKnM2: 0.6,
     columnRestraint: 'restrained',
     roofPitchDeg: 6,
     foundation: defaultFoundationDesign(),
 });
 
+/** Merge a partial server design onto the app defaults. */
+export function normalizePortalFrameDesign(
+    design: Partial<PortalFrameDesign> | PortalFrameDesign,
+): PortalFrameDesign {
+    const defaults = defaultPortalFrameDesign();
+
+    return {
+        ...defaults,
+        ...design,
+        // Pre-services schemes (no servicesLoadKnM2 sent) keep 0 so their
+        // carbon numbers don't silently shift; fresh drafts get the 0.25
+        // default via the spread above.
+        servicesLoadKnM2: design.servicesLoadKnM2 ?? 0,
+        foundation: {
+            type: design.foundation?.type ?? defaults.foundation.type,
+            assumptions: {
+                ...defaults.foundation.assumptions,
+                ...(design.foundation?.assumptions ?? {}),
+            },
+        },
+    };
+}
+
 export function frameCount(design: PortalFrameDesign): number {
-    const bayCount = Math.max(1, Math.round(design.buildingLength / design.baySpacing));
+    const bayCount = Math.max(
+        1,
+        Math.round(design.buildingLength / design.baySpacing),
+    );
 
     return bayCount + 1;
 }
 
-export function isGableEndFrame(frameIndex: number, design: PortalFrameDesign): boolean {
+export function isGableEndFrame(
+    frameIndex: number,
+    design: PortalFrameDesign,
+): boolean {
     const count = frameCount(design);
 
     return frameIndex === 0 || frameIndex === count - 1;
@@ -188,20 +254,49 @@ export function frameTributaryWidthM(
         : design.baySpacing;
 }
 
-/** Interior-frame line load used for section lookup and worst-case design. */
-export function rafterLineLoadKnM(design: PortalFrameDesign): number {
+/** Permanent (dead + services) load, characteristic, kN/m². */
+export function permanentLoadKnM2(design: PortalFrameDesign): number {
+    return design.deadLoadKnM2 + design.servicesLoadKnM2;
+}
+
+/** ULS factored area load, kN/m²: γ_G·(dead+services) + γ_Q·live. */
+export function factoredAreaLoadKnM2(design: PortalFrameDesign): number {
     return (
-        (design.deadLoadKnM2 + design.liveLoadKnM2) * design.baySpacing
+        DEAD_LOAD_PARTIAL_FACTOR * permanentLoadKnM2(design) +
+        LIVE_LOAD_PARTIAL_FACTOR * design.liveLoadKnM2
     );
 }
 
+/** Interior-frame characteristic line load (dead + services + live) × bay, kN/m. */
+export function rafterLineLoadKnM(design: PortalFrameDesign): number {
+    return (
+        (permanentLoadKnM2(design) + design.liveLoadKnM2) * design.baySpacing
+    );
+}
+
+/** Per-frame characteristic line load using each frame's tributary width, kN/m. */
 export function rafterLineLoadKnMForFrame(
     design: PortalFrameDesign,
     frameIndex: number,
 ): number {
     return (
-        (design.deadLoadKnM2 + design.liveLoadKnM2) *
+        (permanentLoadKnM2(design) + design.liveLoadKnM2) *
         frameTributaryWidthM(design, frameIndex)
+    );
+}
+
+/** Interior-frame ULS factored line load used for section lookup, kN/m. */
+export function factoredRafterLineLoadKnM(design: PortalFrameDesign): number {
+    return factoredAreaLoadKnM2(design) * design.baySpacing;
+}
+
+/** Per-frame ULS factored line load using each frame's tributary width, kN/m. */
+export function factoredRafterLineLoadKnMForFrame(
+    design: PortalFrameDesign,
+    frameIndex: number,
+): number {
+    return (
+        factoredAreaLoadKnM2(design) * frameTributaryWidthM(design, frameIndex)
     );
 }
 

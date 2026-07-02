@@ -1,28 +1,28 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { defineAsyncComponent } from 'vue';
-import PendingInvitationsModal from '@/components/PendingInvitationsModal.vue';
-import { scene } from '@/routes';
-import type { DashboardInvitation, Team } from '@/types';
+import PendingInvitationsModal from '@/components/teams/PendingInvitationsModal.vue';
+import type { DashboardInvitation } from '@/types';
+import type { ServerProject } from '@/types/scene';
 
 const UkMap3D = defineAsyncComponent(
-    () => import('@/components/UkMap3D.vue'),
+    () => import('@/components/scene/UkMap3D.vue'),
 );
 
-defineProps<{
-    pendingInvitations?: DashboardInvitation[];
-}>();
-
-defineOptions({
-    layout: (props: { currentTeam?: Team | null }) => ({
-        breadcrumbs: [
-            {
-                title: '3D Scene',
-                href: props.currentTeam ? scene(props.currentTeam.slug) : '/',
-            },
-        ],
-    }),
-});
+withDefaults(
+    defineProps<{
+        projects?: ServerProject[];
+        pendingInvitations?: DashboardInvitation[];
+        focusBuildingSlug?: string | null;
+        focusSchemeId?: number | null;
+    }>(),
+    {
+        projects: () => [],
+        pendingInvitations: () => [],
+        focusBuildingSlug: null,
+        focusSchemeId: null,
+    },
+);
 </script>
 
 <template>
@@ -33,7 +33,11 @@ defineOptions({
         :invitations="pendingInvitations"
     />
 
-    <div class="relative h-[calc(100svh-4rem)] min-h-0 overflow-hidden">
-        <UkMap3D />
+    <div class="relative h-svh min-h-0 overflow-hidden">
+        <UkMap3D
+            :projects="projects"
+            :focus-building-slug="focusBuildingSlug"
+            :focus-scheme-id="focusSchemeId"
+        />
     </div>
 </template>

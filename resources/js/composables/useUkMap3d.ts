@@ -1,36 +1,46 @@
-import { AttributionControl, NavigationControl, TerrainControl } from 'maplibre-gl';
+import {
+    AttributionControl,
+    NavigationControl,
+    TerrainControl,
+} from 'maplibre-gl';
 import type { LngLatLike } from 'maplibre-gl';
 import { onUnmounted, ref, shallowRef, watch } from 'vue';
-import type { Ref } from 'vue';
-import {
-    createCustomBuildingsLayer,
-} from '@/lib/map-custom-buildings-layer';
-import type { CustomBuildingsLayer } from '@/lib/map-custom-buildings-layer';
-import { setupBuildingDrag } from '@/lib/map-building-drag';
-import { createMap } from '@/lib/maplibre';
-import { constrainMapToUk, UK_MAX_BOUNDS } from '@/lib/uk-map-bounds';
+import type { Ref, ShallowRef } from 'vue';
+import { setupBuildingDrag } from '@/lib/map/map-building-drag';
+import { createCustomBuildingsLayer } from '@/lib/map/map-custom-buildings-layer';
+import type { CustomBuildingsLayer } from '@/lib/map/map-custom-buildings-layer';
+import { createMap } from '@/lib/map/maplibre';
+import { constrainMapToUk, UK_MAX_BOUNDS } from '@/lib/map/uk-map-bounds';
 import {
     addUkBuildingExtrusions,
     OPENFREEMAP_STYLE,
     UK_MAP_DEFAULTS,
-} from '@/lib/uk-map-buildings';
+} from '@/lib/map/uk-map-buildings';
 import {
     addUkMapTerrain,
     queryTerrainAltitude,
     TERRAIN_DEFAULTS,
     TERRAIN_SOURCE_ID,
-} from '@/lib/uk-map-terrain';
-import type { BuildingDraft, CustomBuilding } from '@/types/custom-building';
+} from '@/lib/map/uk-map-terrain';
+import type {
+    BuildingDraft,
+    BuildingPersistence,
+    CustomBuilding,
+} from '@/types/custom-building';
+
+type MapInstance = ReturnType<typeof createMap>;
 
 export type UseUkMap3dReturn = {
     isLoading: Ref<boolean>;
     error: Ref<string | null>;
     customBuildings: Ref<CustomBuilding[]>;
+    mapInstance: ShallowRef<MapInstance | null>;
     addBuildingAt: (
         draft: BuildingDraft,
         origin: [number, number],
     ) => CustomBuilding;
     updateBuilding: (id: string, draft: BuildingDraft) => void;
+    attachPersistence: (id: string, persisted: BuildingPersistence) => void;
     removeBuilding: (id: string) => void;
     flyToBuilding: (id: string) => void;
     resize: () => void;
@@ -38,18 +48,23 @@ export type UseUkMap3dReturn = {
 
 export function useUkMap3d(
     containerRef: Ref<HTMLElement | null>,
+    initialBuildings: CustomBuilding[] = [],
 ): UseUkMap3dReturn {
     const isLoading = ref(true);
     const error = ref<string | null>(null);
-    const customBuildings = ref<CustomBuilding[]>([]);
-    const mapRef = shallowRef<ReturnType<typeof createMap> | null>(null);
+    const customBuildings = ref<CustomBuilding[]>([...initialBuildings]);
+    const mapRef = shallowRef<MapInstance | null>(null);
     const customLayerRef = shallowRef<CustomBuildingsLayer | null>(null);
     let dragCleanup: (() => void) | null = null;
 
-    watch(customBuildings, (buildings) => {
-        customLayerRef.value?.syncBuildings(buildings);
-        mapRef.value?.triggerRepaint();
-    }, { deep: true });
+    watch(
+        customBuildings,
+        (buildings) => {
+            customLayerRef.value?.syncBuildings(buildings);
+            mapRef.value?.triggerRepaint();
+        },
+        { deep: true },
+    );
 
     function destroyMap(): void {
         dragCleanup?.();
@@ -76,7 +91,10 @@ export function useUkMap3d(
                 canvasContextAttributes: { antialias: true },
             });
 
-            map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+            map.addControl(
+                new NavigationControl({ visualizePitch: true }),
+                'top-right',
+            );
             map.addControl(
                 new TerrainControl({
                     source: TERRAIN_SOURCE_ID,
@@ -84,7 +102,10 @@ export function useUkMap3d(
                 }),
                 'top-right',
             );
-            map.addControl(new AttributionControl({ compact: true }), 'bottom-right');
+            map.addControl(
+                new AttributionControl({ compact: true }),
+                'bottom-right',
+            );
 
             const customLayer = createCustomBuildingsLayer(customBuildings);
             customLayerRef.value = customLayer;
@@ -174,6 +195,15 @@ export function useUkMap3d(
         );
     }
 
+    function attachPersistence(
+        id: string,
+        persisted: BuildingPersistence,
+    ): void {
+        customBuildings.value = customBuildings.value.map((building) =>
+            building.id === id ? { ...building, persisted } : building,
+        );
+    }
+
     function removeBuilding(id: string): void {
         customBuildings.value = customBuildings.value.filter(
             (building) => building.id !== id,
@@ -183,7 +213,7 @@ export function useUkMap3d(
     function flyToBuilding(id: string): void {
         const building = customBuildings.value.find((entry) => entry.id === id);
 
-        if (!building || !mapRef.value) {
+        if (!building?.origin || !mapRef.value) {
             return;
         }
 
@@ -203,8 +233,10 @@ export function useUkMap3d(
         isLoading,
         error,
         customBuildings,
+        mapInstance: mapRef,
         addBuildingAt,
         updateBuilding,
+        attachPersistence,
         removeBuilding,
         flyToBuilding,
         resize,

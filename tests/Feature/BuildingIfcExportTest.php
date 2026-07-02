@@ -14,6 +14,7 @@ test('guests cannot export building ifc files', function () {
         'buildingLength' => 40,
         'baySpacing' => 5,
         'deadLoadKnM2' => 1.25,
+        'servicesLoadKnM2' => 0.25,
         'liveLoadKnM2' => 0.75,
         'columnRestraint' => 'restrained',
     ]);
@@ -41,6 +42,7 @@ test('authenticated users can export a portal frame ifc file', function () {
             'buildingLength' => 40,
             'baySpacing' => 5,
             'deadLoadKnM2' => 1.25,
+            'servicesLoadKnM2' => 0.25,
             'liveLoadKnM2' => 0.75,
             'columnRestraint' => 'restrained',
             'roofPitchDeg' => 6,
@@ -63,8 +65,8 @@ test('authenticated users can export a portal frame ifc file', function () {
     expect($contents)->toContain('IFCRELCONTAINEDINSPATIALSTRUCTURE');
     expect($contents)->toContain('ground-floor-slab');
     expect($contents)->toContain('Ground floor slab');
-    expect($contents)->toContain('UB 356x171x45');
-    expect($contents)->toContain('UB 406x178x74');
+    expect($contents)->toContain('UB 356x171x67');
+    expect($contents)->toContain('UB 533x210x101');
     expect($contents)->toContain('frame-0-rafter-left');
     expect($contents)->toContain('frame-0-haunch-left');
     expect($contents)->toContain('Eaves haunch');
@@ -98,6 +100,7 @@ test('authenticated users can export selected two pile cap foundations to ifc', 
             'buildingLength' => 40,
             'baySpacing' => 5,
             'deadLoadKnM2' => 1.25,
+            'servicesLoadKnM2' => 0.25,
             'liveLoadKnM2' => 0.75,
             'columnRestraint' => 'restrained',
             'roofPitchDeg' => 6,
@@ -148,6 +151,7 @@ test('authenticated users can export selected mass filled foundations to ifc', f
             'buildingLength' => 40,
             'baySpacing' => 5,
             'deadLoadKnM2' => 1.25,
+            'servicesLoadKnM2' => 0.25,
             'liveLoadKnM2' => 0.75,
             'columnRestraint' => 'restrained',
             'roofPitchDeg' => 6,

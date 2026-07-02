@@ -1,7 +1,9 @@
 import {
     defaultPortalFrameDesign,
-    type PortalFrameDesign,
+    normalizePortalFrameDesign,
 } from '@/types/portal-frame';
+import type { PortalFrameDesign } from '@/types/portal-frame';
+import type { ServerBuilding } from '@/types/scene';
 
 export type BuildingRotation = [x: number, y: number, z: number];
 
@@ -10,16 +12,75 @@ export type BuildingDraft = {
     rotation: BuildingRotation;
 };
 
+/** Server identifiers attached to a placed building once it has been saved. */
+export type BuildingPersistence = {
+    buildingId: number;
+    projectSlug: string;
+    schemeId: number | null;
+    name: string;
+    addressLabel: string | null;
+};
+
 export type CustomBuilding = BuildingDraft & {
     id: string;
-    origin: [lng: number, lat: number];
+    /** Null when the building has not been placed on the map yet. */
+    origin: [lng: number, lat: number] | null;
     altitude: number;
+    /** Present when this building has been persisted to the database. */
+    persisted?: BuildingPersistence;
 };
+
+/** A building with a map location, renderable on the map. */
+export type PlacedCustomBuilding = CustomBuilding & {
+    origin: [lng: number, lat: number];
+};
+
+export function isPlacedOnMap(
+    building: CustomBuilding,
+): building is PlacedCustomBuilding {
+    return building.origin !== null;
+}
 
 export const defaultBuildingDraft = (): BuildingDraft => ({
     portalFrame: defaultPortalFrameDesign(),
     rotation: [0, 0, 0],
 });
+
+/**
+ * Map a persisted building (with its preferred scheme) onto the in-memory
+ * CustomBuilding shape the map renders.
+ */
+export function customBuildingFromServer(
+    building: ServerBuilding,
+    projectSlug: string,
+    schemeId?: number | null,
+): CustomBuilding {
+    const activeScheme =
+        (schemeId != null
+            ? building.schemes.find((scheme) => scheme.id === schemeId)
+            : null) ??
+        building.schemes.find(
+            (scheme) => scheme.id === building.preferredSchemeId,
+        ) ??
+        building.schemes[0];
+
+    return {
+        id: `server-${building.id}`,
+        origin: building.origin,
+        altitude: building.altitude ?? 0,
+        rotation: building.rotation,
+        portalFrame: normalizePortalFrameDesign(
+            activeScheme?.design ?? defaultPortalFrameDesign(),
+        ),
+        persisted: {
+            buildingId: building.id,
+            projectSlug,
+            schemeId: activeScheme?.id ?? null,
+            name: building.name,
+            addressLabel: building.addressLabel,
+        },
+    };
+}
 
 /** Bounding dimensions used for camera framing and map placement. */
 export function portalFrameBounds(design: PortalFrameDesign): {
