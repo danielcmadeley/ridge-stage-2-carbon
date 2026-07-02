@@ -10,16 +10,23 @@ import {
     Map,
     MapPin,
     Save,
-    Search,
     SlidersHorizontal,
 } from '@lucide/vue';
 import { useMediaQuery, useMounted } from '@vueuse/core';
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import AnalyticalViewTab from '@/components/scene/AnalyticalViewTab.vue';
 import BuildingPreview from '@/components/scene/BuildingPreview.vue';
 import BuildingStatisticsPanel from '@/components/scene/BuildingStatisticsPanel.vue';
 import EmbodiedCarbonPanel from '@/components/scene/EmbodiedCarbonPanel.vue';
 import FoundationPropertiesTab from '@/components/scene/FoundationPropertiesTab.vue';
+import FramePropertiesTab from '@/components/scene/FramePropertiesTab.vue';
+import type {
+    PortalFrameDimensionKey,
+    PortalFrameLoadKey,
+} from '@/components/scene/FramePropertiesTab.vue';
+import LocationTab from '@/components/scene/LocationTab.vue';
+import type { RotationAxis } from '@/components/scene/LocationTab.vue';
 import OnboardingDialog from '@/components/scene/OnboardingDialog.vue';
 import type { OnboardingCreatePayload } from '@/components/scene/OnboardingDialog.vue';
 import SaveBuildingDialog from '@/components/scene/SaveBuildingDialog.vue';
@@ -29,9 +36,6 @@ import SchemeSwitcher from '@/components/scene/SchemeSwitcher.vue';
 import TypstPdfPreviewDialog from '@/components/scene/TypstPdfPreviewDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
 import {
     Tooltip,
     TooltipContent,
@@ -48,6 +52,7 @@ import {
     findPersistedBuildingContext,
     formatBuildingLocationLabel,
 } from '@/lib/building/building-statistics';
+import type { SaveSchemeInput } from '@/lib/building/save-scheme';
 import type { GeocodedAddress } from '@/lib/map/geocode-address';
 import type {
     AnalyticalForceMode,
@@ -57,6 +62,7 @@ import { buildCarbonReportTypstSource } from '@/lib/report/typst-carbon-report';
 import { deepToRaw } from '@/lib/utils';
 import {
     defaultBuildingDraft,
+    findInitialCustomBuilding,
     isPlacedOnMap,
     portalFrameBounds,
 } from '@/types/custom-building';
@@ -72,15 +78,6 @@ import type {
     FoundationType,
 } from '@/types/portal-frame';
 import { normalizePortalFrameDesign } from '@/types/portal-frame';
-import {
-    factoredRafterLineLoadKnM,
-    permanentLoadKnM2,
-    rafterLineLoadKnM,
-} from '@/types/portal-frame';
-import {
-    DEAD_LOAD_PARTIAL_FACTOR,
-    LIVE_LOAD_PARTIAL_FACTOR,
-} from '@/types/portal-frame';
 import type { ServerProject, ServerScheme } from '@/types/scene';
 
 const props = withDefaults(
@@ -187,52 +184,16 @@ const {
     handlePdfPreviewOpenChange: handleCarbonReportPreviewOpenChange,
 } = carbonReportExport;
 
-type PortalFrameDimensionKey =
-    | 'span'
-    | 'eavesHeight'
-    | 'buildingLength'
-    | 'baySpacing';
-
-const portalFrameDimensionFields: {
-    key: PortalFrameDimensionKey;
-    label: string;
-    min: number;
-    max: number;
-    step: number;
-}[] = [
-    { key: 'span', label: 'Span (m)', min: 6, max: 48, step: 1 },
-    {
-        key: 'eavesHeight',
-        label: 'Eaves height (m)',
-        min: 3,
-        max: 15,
-        step: 0.5,
-    },
-    {
-        key: 'buildingLength',
-        label: 'Building length (m)',
-        min: 10,
-        max: 120,
-        step: 1,
-    },
-    {
-        key: 'baySpacing',
-        label: 'Bay spacing (m)',
-        min: 3,
-        max: 10,
-        step: 0.5,
-    },
-];
-
 function updatePortalFrameDimension(
     key: PortalFrameDimensionKey,
-    value: number[] | undefined,
+    value: number,
 ): void {
-    if (!value?.length) {
-        return;
-    }
+    draft.portalFrame[key] = value;
+    syncDraftToMap();
+}
 
-    draft.portalFrame[key] = value[0];
+function updatePortalFrameLoad(key: PortalFrameLoadKey, value: number): void {
+    draft.portalFrame[key] = value;
     syncDraftToMap();
 }
 
@@ -240,7 +201,7 @@ const teamSlug = computed(() => page.props.currentTeam?.slug ?? null);
 const placedBuildings = computed(() =>
     props.map.customBuildings.value.filter(isPlacedOnMap),
 );
-const activePlacedBuilding = computed(() =>
+const activeBuilding = computed(() =>
     mapBuildingId.value
         ? (props.map.customBuildings.value.find(
               (building) => building.id === mapBuildingId.value,
@@ -259,7 +220,7 @@ const hasProjects = computed(() => props.projects.length > 0);
 const unplacedPersistence = ref<BuildingPersistence | null>(null);
 
 const activePersistence = computed(
-    () => activePlacedBuilding.value?.persisted ?? unplacedPersistence.value,
+    () => activeBuilding.value?.persisted ?? unplacedPersistence.value,
 );
 
 function clonePortalFrameDesign(design: PortalFrameDesign): PortalFrameDesign {
@@ -294,7 +255,7 @@ watch(mapBuildingId, (buildingId, previousBuildingId) => {
         return;
     }
 
-    const building = placedBuildings.value.find(
+    const building = props.map.customBuildings.value.find(
         (entry) => entry.id === buildingId,
     );
 
@@ -323,7 +284,7 @@ function switchToScheme(scheme: ServerScheme): void {
     Object.assign(draft.portalFrame, clonePortalFrameDesign(scheme.design));
     syncDraftToMap();
 
-    const active = activePlacedBuilding.value;
+    const active = activeBuilding.value;
 
     if (active?.persisted) {
         props.map.attachPersistence(active.id, {
@@ -358,7 +319,7 @@ const locationLabel = computed(() => {
         return query;
     }
 
-    const active = activePlacedBuilding.value;
+    const active = activeBuilding.value;
 
     if (active?.origin) {
         return formatBuildingLocationLabel({
@@ -403,12 +364,38 @@ function openSaveDialog(): void {
     saveDialogOpen.value = true;
 }
 
+/**
+ * The scheme half of a save payload: the active scheme identity, the current
+ * design draft, the building's map placement, and the frontend-computed
+ * snapshot. Returns null while the design results are unavailable.
+ */
+function currentSchemeSaveInput(): Omit<SaveSchemeInput, 'building'> | null {
+    if (!resolvedFrame.value || !carbon.value || !foundationSizing.value) {
+        return null;
+    }
+
+    // A map placement is optional: an unplaced building saves without a location.
+    const active = activeBuilding.value;
+
+    return {
+        scheme: { id: activePersistence.value?.schemeId ?? null },
+        draft: {
+            portalFrame: { ...draft.portalFrame },
+            rotation: [...draft.rotation],
+        },
+        origin: active?.origin ?? null,
+        altitude: active?.altitude ?? null,
+        carbon: carbon.value,
+        members: resolvedFrame.value.members,
+        foundationSizing: foundationSizing.value,
+    };
+}
+
 async function saveBuilding(): Promise<void> {
     saveError.value = null;
     saveSuccess.value = false;
 
-    // A map placement is optional: an unplaced building saves without a location.
-    const active = activePlacedBuilding.value;
+    const active = activeBuilding.value;
     const persisted = activePersistence.value;
 
     if (!teamSlug.value) {
@@ -423,7 +410,9 @@ async function saveBuilding(): Promise<void> {
         return;
     }
 
-    if (!resolvedFrame.value || !carbon.value || !foundationSizing.value) {
+    const schemeInput = currentSchemeSaveInput();
+
+    if (!schemeInput) {
         saveError.value =
             frameError.value ?? 'The design is not ready to save yet.';
 
@@ -447,16 +436,7 @@ async function saveBuilding(): Promise<void> {
                         persisted?.addressLabel ||
                         null,
                 },
-                scheme: { id: persisted?.schemeId ?? null },
-                draft: {
-                    portalFrame: { ...draft.portalFrame },
-                    rotation: [...draft.rotation],
-                },
-                origin: active?.origin ?? null,
-                altitude: active?.altitude ?? null,
-                carbon: carbon.value,
-                members: resolvedFrame.value.members,
-                foundationSizing: foundationSizing.value,
+                ...schemeInput,
             },
         );
 
@@ -498,7 +478,9 @@ async function saveActiveScheme(): Promise<void> {
         return;
     }
 
-    if (!resolvedFrame.value || !carbon.value || !foundationSizing.value) {
+    const schemeInput = currentSchemeSaveInput();
+
+    if (!schemeInput) {
         toast.error(frameError.value ?? 'The design is not ready to save yet.');
 
         return;
@@ -508,7 +490,7 @@ async function saveActiveScheme(): Promise<void> {
 
     try {
         const { saveScheme } = await import('@/lib/building/save-scheme');
-        const active = activePlacedBuilding.value;
+        const active = activeBuilding.value;
 
         const response = await saveScheme(
             teamSlug.value,
@@ -521,16 +503,7 @@ async function saveActiveScheme(): Promise<void> {
                         persisted.addressLabel ||
                         null,
                 },
-                scheme: { id: persisted.schemeId ?? null },
-                draft: {
-                    portalFrame: { ...draft.portalFrame },
-                    rotation: [...draft.rotation],
-                },
-                origin: active?.origin ?? null,
-                altitude: active?.altitude ?? null,
-                carbon: carbon.value,
-                members: resolvedFrame.value.members,
-                foundationSizing: foundationSizing.value,
+                ...schemeInput,
             },
         );
 
@@ -578,33 +551,10 @@ const savedBuildingCount = computed(() =>
     ),
 );
 
-function findPlacedBuildingForFocus(): CustomBuilding | undefined {
-    if (!props.focusBuildingSlug) {
-        return undefined;
-    }
-
-    for (const project of props.projects) {
-        const serverBuilding = project.buildings?.find(
-            (building) => building.slug === props.focusBuildingSlug,
-        );
-
-        if (!serverBuilding) {
-            continue;
-        }
-
-        return placedBuildings.value.find(
-            (building) => building.persisted?.buildingId === serverBuilding.id,
-        );
-    }
-
-    return undefined;
-}
-
 function findInitialBuilding(): CustomBuilding | null {
-    return (
-        findPlacedBuildingForFocus() ??
-        placedBuildings.value.find((building) => building.persisted) ??
-        null
+    return findInitialCustomBuilding(
+        props.map.customBuildings.value,
+        props.focusBuildingSlug,
     );
 }
 
@@ -670,7 +620,7 @@ async function createFirstBuilding(
         }
 
         // Place the building on the map (when a location was chosen) and make
-        // it the active building. The activePlacedBuilding watcher resets the
+        // it the active building. The activeBuilding watcher resets the
         // name field, so re-apply it afterwards before saving.
         const name = buildingName.value.trim() || 'Building 1';
 
@@ -711,7 +661,7 @@ async function createFirstBuilding(
     }
 }
 
-const activeOrigin = computed(() => activePlacedBuilding.value?.origin ?? null);
+const activeOrigin = computed(() => activeBuilding.value?.origin ?? null);
 const mapInstance = computed(() => props.map.mapInstance.value);
 
 const { surroundings: surroundingsGroup } = useNearbySurroundings(
@@ -892,7 +842,7 @@ async function exportBuilding(): Promise<void> {
                 rotation: [...draft.rotation],
             },
             {
-                name: activePlacedBuilding.value
+                name: activeBuilding.value
                     ? `${draft.portalFrame.span}m span portal frame`
                     : undefined,
             },
@@ -908,9 +858,13 @@ async function exportBuilding(): Promise<void> {
     }
 }
 
-function updateColumnRestraint(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value as ColumnRestraint;
+function updateColumnRestraint(value: ColumnRestraint): void {
     draft.portalFrame.columnRestraint = value;
+    syncDraftToMap();
+}
+
+function updateRotationAxis(axis: RotationAxis, value: number): void {
+    draft.rotation[axis] = value;
     syncDraftToMap();
 }
 
@@ -1140,371 +1094,23 @@ function updateFoundationAssumption(
                 >
                     <div class="flex min-h-0 flex-1 flex-col gap-4 p-4">
                         <!-- Frame Properties -->
-                        <div
+                        <FramePropertiesTab
                             v-if="activeTab === 'frame'"
-                            class="flex flex-col gap-4"
-                            role="tabpanel"
-                            aria-label="Frame Properties"
-                        >
-                            <div class="space-y-4">
-                                <div
-                                    v-for="field in portalFrameDimensionFields"
-                                    :key="field.key"
-                                    class="grid gap-2"
-                                >
-                                    <div
-                                        class="flex items-center justify-between gap-2"
-                                    >
-                                        <Label :for="field.key">{{
-                                            field.label
-                                        }}</Label>
-                                        <span
-                                            class="text-sm text-muted-foreground tabular-nums"
-                                        >
-                                            {{ draft.portalFrame[field.key] }}
-                                        </span>
-                                    </div>
-                                    <Slider
-                                        :id="field.key"
-                                        :model-value="[
-                                            draft.portalFrame[field.key],
-                                        ]"
-                                        :min="field.min"
-                                        :max="field.max"
-                                        :step="field.step"
-                                        @update:model-value="
-                                            (value) =>
-                                                updatePortalFrameDimension(
-                                                    field.key,
-                                                    value,
-                                                )
-                                        "
-                                    />
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-3 gap-3">
-                                <div class="grid gap-2">
-                                    <Label for="dead-load">Dead (kN/m²)</Label>
-                                    <Input
-                                        id="dead-load"
-                                        v-model.number="
-                                            draft.portalFrame.deadLoadKnM2
-                                        "
-                                        type="number"
-                                        min="0"
-                                        step="0.05"
-                                        @change="syncDraftToMap"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="services-load"
-                                        >Services (kN/m²)</Label
-                                    >
-                                    <Input
-                                        id="services-load"
-                                        v-model.number="
-                                            draft.portalFrame.servicesLoadKnM2
-                                        "
-                                        type="number"
-                                        min="0"
-                                        step="0.05"
-                                        @change="syncDraftToMap"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="live-load">Live (kN/m²)</Label>
-                                    <Input
-                                        id="live-load"
-                                        v-model.number="
-                                            draft.portalFrame.liveLoadKnM2
-                                        "
-                                        type="number"
-                                        min="0"
-                                        step="0.05"
-                                        @change="syncDraftToMap"
-                                    />
-                                </div>
-                            </div>
-
-                            <div
-                                v-if="resolvedFrame"
-                                class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-xs"
-                            >
-                                <p class="font-medium">
-                                    Load factoring (EC0 ULS)
-                                </p>
-                                <dl
-                                    class="mt-1 grid grid-cols-[auto_1fr_auto] gap-x-2 gap-y-0.5"
-                                >
-                                    <dt>Permanent</dt>
-                                    <dd class="text-muted-foreground">
-                                        dead + services =
-                                        {{
-                                            permanentLoadKnM2(
-                                                draft.portalFrame,
-                                            ).toFixed(2)
-                                        }}
-                                        kN/m²
-                                    </dd>
-                                    <dd class="tabular-nums">
-                                        ×{{
-                                            DEAD_LOAD_PARTIAL_FACTOR.toFixed(2)
-                                        }}
-                                        =
-                                        {{
-                                            (
-                                                permanentLoadKnM2(
-                                                    draft.portalFrame,
-                                                ) * DEAD_LOAD_PARTIAL_FACTOR
-                                            ).toFixed(2)
-                                        }}
-                                    </dd>
-                                    <dt>Variable</dt>
-                                    <dd class="text-muted-foreground">
-                                        live =
-                                        {{
-                                            draft.portalFrame.liveLoadKnM2.toFixed(
-                                                2,
-                                            )
-                                        }}
-                                        kN/m²
-                                    </dd>
-                                    <dd class="tabular-nums">
-                                        ×{{
-                                            LIVE_LOAD_PARTIAL_FACTOR.toFixed(2)
-                                        }}
-                                        =
-                                        {{
-                                            (
-                                                draft.portalFrame.liveLoadKnM2 *
-                                                LIVE_LOAD_PARTIAL_FACTOR
-                                            ).toFixed(2)
-                                        }}
-                                    </dd>
-                                    <dt class="font-medium">Factored</dt>
-                                    <dd></dd>
-                                    <dd class="font-medium tabular-nums">
-                                        {{
-                                            (
-                                                permanentLoadKnM2(
-                                                    draft.portalFrame,
-                                                ) *
-                                                    DEAD_LOAD_PARTIAL_FACTOR +
-                                                draft.portalFrame.liveLoadKnM2 *
-                                                    LIVE_LOAD_PARTIAL_FACTOR
-                                            ).toFixed(2)
-                                        }}
-                                        kN/m²
-                                    </dd>
-                                </dl>
-                            </div>
-
-                            <div class="grid gap-2">
-                                <Label for="column-restraint"
-                                    >Column restraint</Label
-                                >
-                                <select
-                                    id="column-restraint"
-                                    class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-                                    :value="draft.portalFrame.columnRestraint"
-                                    @change="updateColumnRestraint"
-                                >
-                                    <option value="restrained">
-                                        Restrained
-                                    </option>
-                                    <option value="unrestrained">
-                                        Unrestrained
-                                    </option>
-                                </select>
-                            </div>
-
-                            <div
-                                v-if="resolvedFrame"
-                                class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-sm"
-                            >
-                                <p>
-                                    Rafter line load (characteristic):
-                                    {{
-                                        rafterLineLoadKnM(
-                                            draft.portalFrame,
-                                        ).toFixed(2)
-                                    }}
-                                    kN/m
-                                </p>
-                                <p>
-                                    Rafter line load (factored):
-                                    {{
-                                        factoredRafterLineLoadKnM(
-                                            draft.portalFrame,
-                                        ).toFixed(2)
-                                    }}
-                                    kN/m (used for section lookup)
-                                </p>
-                                <p>
-                                    Lookup span:
-                                    {{ resolvedFrame.lookupSpanM }} m
-                                </p>
-                                <p>Rafter: {{ resolvedFrame.rafter.name }}</p>
-                                <p>Column: {{ resolvedFrame.column.name }}</p>
-                            </div>
-
-                            <p
-                                v-if="frameError"
-                                class="text-sm text-destructive"
-                            >
-                                {{ frameError }}
-                            </p>
-                        </div>
+                            :design="draft.portalFrame"
+                            :resolved-frame="resolvedFrame"
+                            :frame-error="frameError"
+                            @update-dimension="updatePortalFrameDimension"
+                            @update-load="updatePortalFrameLoad"
+                            @update-column-restraint="updateColumnRestraint"
+                        />
 
                         <!-- Analytical View -->
-                        <div
+                        <AnalyticalViewTab
                             v-if="activeTab === 'analytical'"
-                            class="flex flex-col gap-4"
-                            role="tabpanel"
-                            aria-label="Analytical view"
-                        >
-                            <p class="text-sm text-muted-foreground">
-                                Force diagrams are shown on the 3D preview.
-                            </p>
-
-                            <div class="grid grid-cols-2 gap-2">
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    :variant="
-                                        analyticalLoadCase === 'unfactored'
-                                            ? 'default'
-                                            : 'outline'
-                                    "
-                                    @click="analyticalLoadCase = 'unfactored'"
-                                >
-                                    Unfactored
-                                </Button>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    :variant="
-                                        analyticalLoadCase === 'factored'
-                                            ? 'default'
-                                            : 'outline'
-                                    "
-                                    @click="analyticalLoadCase = 'factored'"
-                                >
-                                    Factored (ULS)
-                                </Button>
-                            </div>
-
-                            <p class="text-xs text-muted-foreground">
-                                {{
-                                    analyticalLoadCase === 'factored'
-                                        ? `Factored: ${DEAD_LOAD_PARTIAL_FACTOR} × (dead + services) + ${LIVE_LOAD_PARTIAL_FACTOR} × live.`
-                                        : 'Unfactored: characteristic loads without partial factors.'
-                                }}
-                            </p>
-
-                            <div class="grid grid-cols-3 gap-2">
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    :variant="
-                                        analyticalForceMode === 'shear'
-                                            ? 'default'
-                                            : 'outline'
-                                    "
-                                    @click="analyticalForceMode = 'shear'"
-                                >
-                                    Shear
-                                </Button>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    :variant="
-                                        analyticalForceMode === 'moment'
-                                            ? 'default'
-                                            : 'outline'
-                                    "
-                                    @click="analyticalForceMode = 'moment'"
-                                >
-                                    Moment
-                                </Button>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    :variant="
-                                        analyticalForceMode === 'axial'
-                                            ? 'default'
-                                            : 'outline'
-                                    "
-                                    @click="analyticalForceMode = 'axial'"
-                                >
-                                    Axial
-                                </Button>
-                            </div>
-
-                            <div
-                                v-if="analyticalBaseReactions"
-                                class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-sm"
-                            >
-                                <p class="mb-1 font-medium">
-                                    Base reactions (pinned,
-                                    {{
-                                        analyticalLoadCase === 'factored'
-                                            ? 'factored'
-                                            : 'unfactored'
-                                    }})
-                                </p>
-                                <div
-                                    class="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-0.5"
-                                >
-                                    <span class="text-muted-foreground"></span>
-                                    <span class="text-muted-foreground"
-                                        >Horizontal</span
-                                    >
-                                    <span class="text-muted-foreground"
-                                        >Vertical</span
-                                    >
-                                    <span class="text-muted-foreground"
-                                        >Left</span
-                                    >
-                                    <span
-                                        >{{
-                                            analyticalBaseReactions.left.fxKn.toFixed(
-                                                1,
-                                            )
-                                        }}
-                                        kN</span
-                                    >
-                                    <span
-                                        >{{
-                                            analyticalBaseReactions.left.fzKn.toFixed(
-                                                1,
-                                            )
-                                        }}
-                                        kN</span
-                                    >
-                                    <span class="text-muted-foreground"
-                                        >Right</span
-                                    >
-                                    <span
-                                        >{{
-                                            analyticalBaseReactions.right.fxKn.toFixed(
-                                                1,
-                                            )
-                                        }}
-                                        kN</span
-                                    >
-                                    <span
-                                        >{{
-                                            analyticalBaseReactions.right.fzKn.toFixed(
-                                                1,
-                                            )
-                                        }}
-                                        kN</span
-                                    >
-                                </div>
-                            </div>
-                        </div>
+                            v-model:force-mode="analyticalForceMode"
+                            v-model:load-case="analyticalLoadCase"
+                            :base-reactions="analyticalBaseReactions"
+                        />
 
                         <!-- Foundation Properties -->
                         <FoundationPropertiesTab
@@ -1517,143 +1123,23 @@ function updateFoundationAssumption(
                         />
 
                         <!-- Location -->
-                        <div
+                        <LocationTab
                             v-if="activeTab === 'location'"
-                            class="flex flex-col gap-4"
-                            role="tabpanel"
-                            aria-label="Location"
-                        >
-                            <div class="grid w-full gap-2">
-                                <Label for="address">Postcode or address</Label>
-                                <Input
-                                    id="address"
-                                    v-model="addressQuery"
-                                    placeholder="e.g. SW1A 1AA or 10 Downing Street"
-                                    @keydown.enter.prevent="searchAddress"
-                                />
-                            </div>
-
-                            <p
-                                v-if="searchError"
-                                class="w-full text-sm text-destructive"
-                            >
-                                {{ searchError }}
-                            </p>
-
-                            <ul
-                                v-if="searchResults.length > 1"
-                                class="max-h-40 w-full space-y-2 overflow-y-auto"
-                            >
-                                <li
-                                    v-for="(result, index) in searchResults"
-                                    :key="`${result.lng}-${result.lat}-${index}`"
-                                >
-                                    <button
-                                        type="button"
-                                        class="w-full rounded-md border border-sidebar-border/70 px-3 py-2 text-left text-sm hover:bg-muted"
-                                        @click="placeBuildingAtAddress(result)"
-                                    >
-                                        {{ result.label }}
-                                    </button>
-                                </li>
-                            </ul>
-
-                            <Button
-                                class="w-full"
-                                :disabled="isSearching"
-                                @click="searchAddress"
-                            >
-                                <Search class="size-4" />
-                                {{ isSearching ? 'Searching…' : 'Find on map' }}
-                            </Button>
-
-                            <div class="grid grid-cols-3 gap-3">
-                                <div class="grid gap-2">
-                                    <Label for="rotation-x"
-                                        >Rotation X (rad)</Label
-                                    >
-                                    <Input
-                                        id="rotation-x"
-                                        v-model.number="draft.rotation[0]"
-                                        type="number"
-                                        step="0.1"
-                                        @change="syncDraftToMap"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="rotation-y"
-                                        >Rotation Y (rad)</Label
-                                    >
-                                    <Input
-                                        id="rotation-y"
-                                        v-model.number="draft.rotation[1]"
-                                        type="number"
-                                        step="0.1"
-                                        @change="syncDraftToMap"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="rotation-z"
-                                        >Rotation Z (rad)</Label
-                                    >
-                                    <Input
-                                        id="rotation-z"
-                                        v-model.number="draft.rotation[2]"
-                                        type="number"
-                                        step="0.1"
-                                        @change="syncDraftToMap"
-                                    />
-                                </div>
-                            </div>
-
-                            <div
-                                v-if="placedBuildings.length > 0"
-                                class="grid gap-2"
-                            >
-                                <Label>Placed buildings</Label>
-                                <ul class="space-y-2">
-                                    <li
-                                        v-for="building in placedBuildings"
-                                        :key="building.id"
-                                        class="flex items-center justify-between rounded-md border border-sidebar-border/70 px-3 py-2 text-sm"
-                                    >
-                                        <button
-                                            type="button"
-                                            class="text-left hover:underline"
-                                            @click="
-                                                openMap({
-                                                    flyToId: building.id,
-                                                })
-                                            "
-                                        >
-                                            {{ building.portalFrame.span }}m
-                                            span ×
-                                            {{
-                                                building.portalFrame
-                                                    .buildingLength
-                                            }}m
-                                        </button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            @click="
-                                                removePlacedBuilding(
-                                                    building.id,
-                                                )
-                                            "
-                                        >
-                                            Remove
-                                        </Button>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <p class="w-full text-xs text-muted-foreground">
-                                Envelope: {{ bounds.width.toFixed(1) }}m ×
-                                {{ bounds.depth.toFixed(1) }}m ×
-                                {{ bounds.height.toFixed(1) }}m apex
-                            </p>
-                        </div>
+                            v-model:query="addressQuery"
+                            :search-results="searchResults"
+                            :search-error="searchError"
+                            :is-searching="isSearching"
+                            :rotation="draft.rotation"
+                            :placed-buildings="placedBuildings"
+                            :bounds="bounds"
+                            @search="searchAddress"
+                            @place-at="placeBuildingAtAddress"
+                            @update-rotation="updateRotationAxis"
+                            @fly-to="
+                                (buildingId) => openMap({ flyToId: buildingId })
+                            "
+                            @remove="removePlacedBuilding"
+                        />
                     </div>
                 </CardContent>
             </Card>

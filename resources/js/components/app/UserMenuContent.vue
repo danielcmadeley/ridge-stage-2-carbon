@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { LogOut, Settings } from '@lucide/vue';
+import { LayoutDashboard, LogOut, Settings } from '@lucide/vue';
 import UserInfo from '@/components/app/UserInfo.vue';
 import {
     DropdownMenuGroup,
@@ -14,6 +14,7 @@ import type { User } from '@/types';
 
 type Props = {
     user: User;
+    dashboardUrl?: string;
 };
 
 const handleLogout = () => {
@@ -31,6 +32,16 @@ defineProps<Props>();
     </DropdownMenuLabel>
     <DropdownMenuSeparator />
     <DropdownMenuGroup>
+        <DropdownMenuItem v-if="dashboardUrl" :as-child="true">
+            <Link
+                class="block w-full cursor-pointer"
+                :href="dashboardUrl"
+                prefetch
+            >
+                <LayoutDashboard class="mr-2 h-4 w-4" />
+                Dashboard
+            </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem :as-child="true">
             <Link class="block w-full cursor-pointer" :href="edit()" prefetch>
                 <Settings class="mr-2 h-4 w-4" />

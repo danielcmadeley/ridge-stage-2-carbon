@@ -3,33 +3,23 @@ import { Form, Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     BadgeCheck,
     Building2,
-    ChevronDown,
     FolderKanban,
     Layers,
-    Leaf,
-    MapPin,
-    Pencil,
     Plus,
     Settings,
-    Trash2,
-    Undo2,
     Users,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import BuildingController from '@/actions/App/Http/Controllers/BuildingController';
 import ProjectController from '@/actions/App/Http/Controllers/ProjectController';
 import SchemeController from '@/actions/App/Http/Controllers/SchemeController';
+import ProjectCard from '@/components/dashboard/ProjectCard.vue';
 import InputError from '@/components/shared/InputError.vue';
 import PendingInvitationsModal from '@/components/teams/PendingInvitationsModal.vue';
 import TeamSwitcher from '@/components/teams/TeamSwitcher.vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import {
     Dialog,
     DialogContent,
@@ -40,11 +30,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { scene } from '@/routes';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editTeam, switchMethod } from '@/routes/teams';
 import type { DashboardInvitation, Team, User } from '@/types';
-import type { ServerProject } from '@/types/scene';
+import type { ServerBuilding, ServerProject } from '@/types/scene';
 
 const props = withDefaults(
     defineProps<{
@@ -86,79 +75,22 @@ const stats = computed(() => {
     ];
 });
 
-const openProjects = ref<Record<string, boolean>>({});
-const openBuildings = ref<Record<string, boolean>>({});
-
-const toggleProject = (slug: string) => {
-    openProjects.value[slug] = !openProjects.value[slug];
-};
-const toggleBuilding = (key: string) => {
-    openBuildings.value[key] = !openBuildings.value[key];
-};
-
 // Building edit/create dialog state.
 const buildingDialog = ref<{
     mode: 'create' | 'edit';
     project: ServerProject;
-    building?: ServerBuildingLite;
+    building?: ServerBuilding;
 } | null>(null);
-type ServerBuildingLite = NonNullable<ServerProject['buildings']>[number];
 
 // Scheme rename/create dialog state.
 const schemeDialog = ref<{
     mode: 'create' | 'edit';
     project: ServerProject;
-    building: ServerBuildingLite;
+    building: ServerBuilding;
     scheme?: { id: number; name: string | null };
 } | null>(null);
 
 const projectDialogOpen = ref(false);
-
-// The scheme with the lowest carbon intensity, only meaningful when there is
-// more than one scheme to compare.
-const lowestCarbonSchemeId = (building: ServerBuildingLite): number | null => {
-    const comparable = building.schemes.filter(
-        (scheme) => scheme.carbon.carbonIntensityKgM2 != null,
-    );
-
-    if (comparable.length < 2) {
-        return null;
-    }
-
-    return comparable.reduce((lowest, scheme) =>
-        scheme.carbon.carbonIntensityKgM2! < lowest.carbon.carbonIntensityKgM2!
-            ? scheme
-            : lowest,
-    ).id;
-};
-
-const toggleSchemeStatus = (
-    project: ServerProject,
-    building: ServerBuildingLite,
-    scheme: { id: number; status: string },
-) => {
-    router.patch(
-        SchemeController.update.url({
-            current_team: teamSlug.value,
-            project: project.slug,
-            building: building.slug,
-            scheme: scheme.id,
-        }),
-        { status: scheme.status === 'verified' ? 'draft' : 'verified' },
-        { preserveScroll: true },
-    );
-};
-
-const sceneHref = (buildingSlug?: string, schemeId?: number) =>
-    scene(
-        { current_team: teamSlug.value },
-        {
-            query: {
-                ...(buildingSlug ? { building: buildingSlug } : {}),
-                ...(schemeId ? { scheme: String(schemeId) } : {}),
-            },
-        },
-    );
 
 const initials = (name?: string) =>
     (name ?? '??')
@@ -310,491 +242,40 @@ const switchTo = (team: Team) => {
                 </div>
 
                 <div v-else class="flex flex-col gap-4">
-                    <article
+                    <ProjectCard
                         v-for="project in projects"
                         :key="project.slug"
-                        class="rounded-2xl border border-ridge-green/10 bg-white shadow-[0_8px_30px_rgba(0,55,35,0.05)] dark:border-border dark:bg-card dark:shadow-none"
-                    >
-                        <Collapsible
-                            :open="openProjects[project.slug] ?? true"
-                            @update:open="toggleProject(project.slug)"
-                        >
-                            <div
-                                class="flex items-center justify-between gap-4 p-5 md:px-6"
-                            >
-                                <div class="min-w-0">
-                                    <CollapsibleTrigger as-child>
-                                        <button
-                                            type="button"
-                                            class="flex items-center gap-2 text-left"
-                                            :aria-expanded="
-                                                openProjects[project.slug] ??
-                                                true
-                                            "
-                                        >
-                                            <ChevronDown
-                                                class="size-4 shrink-0 text-ridge-green/50 transition-transform dark:text-muted-foreground"
-                                                :class="
-                                                    (openProjects[
-                                                        project.slug
-                                                    ] ?? true)
-                                                        ? ''
-                                                        : '-rotate-90'
-                                                "
-                                            />
-                                            <span
-                                                class="ridge-display truncate text-lg leading-[1.2]"
-                                                >{{ project.name }}</span
-                                            >
-                                        </button>
-                                    </CollapsibleTrigger>
-                                    <p
-                                        class="ml-6 truncate text-sm font-light text-ridge-green/60 dark:text-muted-foreground"
-                                    >
-                                        <span v-if="project.client">{{
-                                            project.client
-                                        }}</span>
-                                        <span
-                                            v-if="
-                                                project.client &&
-                                                project.projectNumber
-                                            "
-                                        >
-                                            ·
-                                        </span>
-                                        <span v-if="project.projectNumber">{{
-                                            project.projectNumber
-                                        }}</span>
-                                        <span
-                                            v-if="
-                                                !project.client &&
-                                                !project.projectNumber
-                                            "
-                                        >
-                                            {{
-                                                (project.buildings ?? []).length
-                                            }}
-                                            building(s)
-                                        </span>
-                                    </p>
-                                </div>
-                                <div class="flex shrink-0 items-center gap-1">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        class="rounded-full border-ridge-green/20 text-ridge-green hover:bg-ridge-green/5 hover:text-ridge-green dark:border-border dark:text-foreground dark:hover:bg-accent dark:hover:text-foreground"
-                                        @click="
-                                            buildingDialog = {
-                                                mode: 'create',
-                                                project,
-                                            }
-                                        "
-                                    >
-                                        <Plus class="size-4" /> Building
-                                    </Button>
-                                    <Form
-                                        v-bind="
-                                            ProjectController.destroy.form.delete(
-                                                {
-                                                    current_team: teamSlug,
-                                                    project: project.slug,
-                                                },
-                                            )
-                                        "
-                                        v-slot="{}"
-                                    >
-                                        <Button
-                                            type="submit"
-                                            variant="ghost"
-                                            size="icon"
-                                            class="size-8 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            aria-label="Delete project"
-                                        >
-                                            <Trash2 class="size-4" />
-                                        </Button>
-                                    </Form>
-                                </div>
-                            </div>
-
-                            <CollapsibleContent>
-                                <div
-                                    class="flex flex-col gap-3 px-5 pb-5 md:px-6 md:pb-6"
-                                >
-                                    <div
-                                        v-if="
-                                            (project.buildings ?? []).length ===
-                                            0
-                                        "
-                                        class="rounded-xl border border-dashed border-ridge-green/20 bg-ridge-grey/25 p-6 text-center text-sm font-light text-ridge-green/60 dark:border-border dark:bg-muted/30 dark:text-muted-foreground"
-                                    >
-                                        No buildings yet. Add one to start
-                                        designing schemes.
-                                    </div>
-
-                                    <Collapsible
-                                        v-for="building in project.buildings ??
-                                        []"
-                                        :key="building.slug"
-                                        :open="
-                                            openBuildings[
-                                                `${project.slug}/${building.slug}`
-                                            ] ?? false
-                                        "
-                                        @update:open="
-                                            toggleBuilding(
-                                                `${project.slug}/${building.slug}`,
-                                            )
-                                        "
-                                    >
-                                        <div
-                                            class="rounded-xl bg-ridge-grey/35 dark:bg-muted/40"
-                                        >
-                                            <div
-                                                class="flex items-center justify-between gap-2 p-3 md:px-4"
-                                            >
-                                                <CollapsibleTrigger as-child>
-                                                    <button
-                                                        type="button"
-                                                        class="flex min-w-0 items-center gap-2 text-left"
-                                                        :aria-expanded="
-                                                            openBuildings[
-                                                                `${project.slug}/${building.slug}`
-                                                            ] ?? false
-                                                        "
-                                                    >
-                                                        <ChevronDown
-                                                            class="size-4 shrink-0 text-ridge-green/50 transition-transform dark:text-muted-foreground"
-                                                            :class="
-                                                                (openBuildings[
-                                                                    `${project.slug}/${building.slug}`
-                                                                ] ?? false)
-                                                                    ? ''
-                                                                    : '-rotate-90'
-                                                            "
-                                                        />
-                                                        <Building2
-                                                            class="size-4 shrink-0 text-ridge-green/50 dark:text-muted-foreground"
-                                                        />
-                                                        <span
-                                                            class="truncate text-sm font-medium"
-                                                            >{{
-                                                                building.name
-                                                            }}</span
-                                                        >
-                                                        <Badge
-                                                            variant="outline"
-                                                            class="shrink-0 rounded-full border-ridge-green/20 font-light text-ridge-green/70 dark:border-border dark:text-muted-foreground"
-                                                        >
-                                                            {{
-                                                                building.schemes
-                                                                    .length
-                                                            }}
-                                                            scheme(s)
-                                                        </Badge>
-                                                    </button>
-                                                </CollapsibleTrigger>
-                                                <div
-                                                    class="flex shrink-0 items-center gap-1"
-                                                >
-                                                    <Button
-                                                        as-child
-                                                        size="sm"
-                                                        class="rounded-full bg-ridge-green text-white hover:bg-ridge-green/90"
-                                                    >
-                                                        <Link
-                                                            :href="
-                                                                sceneHref(
-                                                                    building.slug,
-                                                                )
-                                                            "
-                                                        >
-                                                            <MapPin
-                                                                class="size-4"
-                                                            />
-                                                            Open in scene
-                                                        </Link>
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        class="size-8 rounded-full hover:bg-ridge-green/10"
-                                                        aria-label="Edit building"
-                                                        @click="
-                                                            buildingDialog = {
-                                                                mode: 'edit',
-                                                                project,
-                                                                building,
-                                                            }
-                                                        "
-                                                    >
-                                                        <Pencil
-                                                            class="size-4"
-                                                        />
-                                                    </Button>
-                                                    <Form
-                                                        v-bind="
-                                                            BuildingController.destroy.form.delete(
-                                                                {
-                                                                    current_team:
-                                                                        teamSlug,
-                                                                    project:
-                                                                        project.slug,
-                                                                    building:
-                                                                        building.slug,
-                                                                },
-                                                            )
-                                                        "
-                                                        v-slot="{}"
-                                                    >
-                                                        <Button
-                                                            type="submit"
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            class="size-8 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                                            aria-label="Delete building"
-                                                        >
-                                                            <Trash2
-                                                                class="size-4"
-                                                            />
-                                                        </Button>
-                                                    </Form>
-                                                </div>
-                                            </div>
-
-                                            <CollapsibleContent>
-                                                <div
-                                                    class="flex flex-col gap-2 p-3 pt-0 md:px-4 md:pb-4"
-                                                >
-                                                    <div
-                                                        v-if="
-                                                            building.schemes
-                                                                .length === 0
-                                                        "
-                                                        class="text-sm font-light text-ridge-green/60 dark:text-muted-foreground"
-                                                    >
-                                                        No schemes yet.
-                                                    </div>
-
-                                                    <div
-                                                        v-for="scheme in building.schemes"
-                                                        :key="scheme.id"
-                                                        class="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 dark:bg-card"
-                                                        :class="
-                                                            scheme.status ===
-                                                            'verified'
-                                                                ? 'ring-1 ring-ridge-green/40'
-                                                                : 'ring-1 ring-ridge-green/10 dark:ring-border'
-                                                        "
-                                                    >
-                                                        <div
-                                                            class="flex min-w-0 items-center gap-2"
-                                                        >
-                                                            <BadgeCheck
-                                                                v-if="
-                                                                    scheme.status ===
-                                                                    'verified'
-                                                                "
-                                                                class="size-4 shrink-0 text-ridge-green dark:text-emerald-400"
-                                                            />
-                                                            <Layers
-                                                                v-else
-                                                                class="size-4 shrink-0 text-ridge-green/50 dark:text-muted-foreground"
-                                                            />
-                                                            <span
-                                                                class="truncate text-sm"
-                                                                :class="
-                                                                    scheme.status ===
-                                                                    'verified'
-                                                                        ? 'font-medium'
-                                                                        : ''
-                                                                "
-                                                            >
-                                                                {{
-                                                                    scheme.name ??
-                                                                    'Untitled scheme'
-                                                                }}
-                                                            </span>
-                                                            <Badge
-                                                                v-if="
-                                                                    scheme.status ===
-                                                                    'verified'
-                                                                "
-                                                                class="shrink-0 rounded-full border-transparent bg-ridge-green text-white capitalize"
-                                                            >
-                                                                Verified
-                                                            </Badge>
-                                                            <Badge
-                                                                v-else
-                                                                variant="secondary"
-                                                                class="shrink-0 rounded-full font-light capitalize"
-                                                            >
-                                                                {{
-                                                                    scheme.status
-                                                                }}
-                                                            </Badge>
-                                                            <Badge
-                                                                v-if="
-                                                                    scheme.id ===
-                                                                    lowestCarbonSchemeId(
-                                                                        building,
-                                                                    )
-                                                                "
-                                                                variant="outline"
-                                                                class="shrink-0 gap-1 rounded-full border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400"
-                                                            >
-                                                                <Leaf
-                                                                    class="size-3"
-                                                                />
-                                                                Lowest carbon
-                                                            </Badge>
-                                                            <span
-                                                                v-if="
-                                                                    scheme
-                                                                        .carbon
-                                                                        .carbonIntensityKgM2 !=
-                                                                    null
-                                                                "
-                                                                class="shrink-0 text-xs font-light text-ridge-green/60 dark:text-muted-foreground"
-                                                            >
-                                                                {{
-                                                                    Math.round(
-                                                                        scheme
-                                                                            .carbon
-                                                                            .carbonIntensityKgM2,
-                                                                    )
-                                                                }}
-                                                                kgCO₂e/m²
-                                                            </span>
-                                                        </div>
-                                                        <div
-                                                            class="flex shrink-0 items-center gap-1"
-                                                        >
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                class="rounded-full border-ridge-green/20 text-ridge-green hover:bg-ridge-green/5 hover:text-ridge-green dark:border-border dark:text-foreground dark:hover:bg-accent dark:hover:text-foreground"
-                                                                @click="
-                                                                    toggleSchemeStatus(
-                                                                        project,
-                                                                        building,
-                                                                        scheme,
-                                                                    )
-                                                                "
-                                                            >
-                                                                <Undo2
-                                                                    v-if="
-                                                                        scheme.status ===
-                                                                        'verified'
-                                                                    "
-                                                                    class="size-4"
-                                                                />
-                                                                <BadgeCheck
-                                                                    v-else
-                                                                    class="size-4"
-                                                                />
-                                                                {{
-                                                                    scheme.status ===
-                                                                    'verified'
-                                                                        ? 'Mark draft'
-                                                                        : 'Verify'
-                                                                }}
-                                                            </Button>
-                                                            <Button
-                                                                as-child
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                class="rounded-full hover:bg-ridge-green/10"
-                                                            >
-                                                                <Link
-                                                                    :href="
-                                                                        sceneHref(
-                                                                            building.slug,
-                                                                            scheme.id,
-                                                                        )
-                                                                    "
-                                                                >
-                                                                    <MapPin
-                                                                        class="size-4"
-                                                                    />
-                                                                    Open
-                                                                </Link>
-                                                            </Button>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                class="size-8 rounded-full hover:bg-ridge-green/10"
-                                                                aria-label="Rename scheme"
-                                                                @click="
-                                                                    schemeDialog =
-                                                                        {
-                                                                            mode: 'edit',
-                                                                            project,
-                                                                            building,
-                                                                            scheme: {
-                                                                                id: scheme.id,
-                                                                                name: scheme.name,
-                                                                            },
-                                                                        }
-                                                                "
-                                                            >
-                                                                <Pencil
-                                                                    class="size-4"
-                                                                />
-                                                            </Button>
-                                                            <Form
-                                                                v-bind="
-                                                                    SchemeController.destroy.form.delete(
-                                                                        {
-                                                                            current_team:
-                                                                                teamSlug,
-                                                                            project:
-                                                                                project.slug,
-                                                                            building:
-                                                                                building.slug,
-                                                                            scheme: scheme.id,
-                                                                        },
-                                                                    )
-                                                                "
-                                                                v-slot="{}"
-                                                            >
-                                                                <Button
-                                                                    type="submit"
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    class="size-8 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                                                    aria-label="Delete scheme"
-                                                                >
-                                                                    <Trash2
-                                                                        class="size-4"
-                                                                    />
-                                                                </Button>
-                                                            </Form>
-                                                        </div>
-                                                    </div>
-
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        class="w-fit rounded-full text-ridge-green/70 hover:bg-ridge-green/10 hover:text-ridge-green dark:text-muted-foreground dark:hover:text-foreground"
-                                                        @click="
-                                                            schemeDialog = {
-                                                                mode: 'create',
-                                                                project,
-                                                                building,
-                                                            }
-                                                        "
-                                                    >
-                                                        <Plus class="size-4" />
-                                                        Add scheme
-                                                    </Button>
-                                                </div>
-                                            </CollapsibleContent>
-                                        </div>
-                                    </Collapsible>
-                                </div>
-                            </CollapsibleContent>
-                        </Collapsible>
-                    </article>
+                        :team-slug="teamSlug"
+                        :project="project"
+                        @create-building="
+                            buildingDialog = { mode: 'create', project }
+                        "
+                        @edit-building="
+                            (building) =>
+                                (buildingDialog = {
+                                    mode: 'edit',
+                                    project,
+                                    building,
+                                })
+                        "
+                        @create-scheme="
+                            (building) =>
+                                (schemeDialog = {
+                                    mode: 'create',
+                                    project,
+                                    building,
+                                })
+                        "
+                        @rename-scheme="
+                            (building, scheme) =>
+                                (schemeDialog = {
+                                    mode: 'edit',
+                                    project,
+                                    building,
+                                    scheme,
+                                })
+                        "
+                    />
                 </div>
             </section>
 
@@ -1213,7 +694,9 @@ const switchTo = (team: Team) => {
     font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
-.ridge-display {
+/* :deep() lets the display face reach child components (e.g. ProjectCard). */
+.ridge-display,
+.dashboard-ridge :deep(.ridge-display) {
     font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
     font-feature-settings:
         'liga' 0,

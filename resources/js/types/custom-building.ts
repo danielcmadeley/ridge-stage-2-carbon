@@ -84,6 +84,36 @@ export function customBuildingFromServer(
     };
 }
 
+/**
+ * Pick the building the editor should activate on load: the focused building
+ * when given, otherwise the first persisted building — preferring placed ones,
+ * but falling back to a saved building without a location so its identity is
+ * active and adding a location updates it instead of creating a new building.
+ */
+export function findInitialCustomBuilding(
+    buildings: CustomBuilding[],
+    focusBuildingSlug: string | null = null,
+): CustomBuilding | null {
+    if (focusBuildingSlug) {
+        const focused = buildings.find(
+            (building) =>
+                building.persisted?.buildingSlug === focusBuildingSlug,
+        );
+
+        if (focused) {
+            return focused;
+        }
+    }
+
+    return (
+        buildings.find(
+            (building) => building.persisted && isPlacedOnMap(building),
+        ) ??
+        buildings.find((building) => building.persisted) ??
+        null
+    );
+}
+
 /** Bounding dimensions used for camera framing and map placement. */
 export function portalFrameBounds(design: PortalFrameDesign): {
     width: number;

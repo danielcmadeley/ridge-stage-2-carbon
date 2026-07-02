@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { customBuildingFromServer } from '@/types/custom-building';
+import {
+    customBuildingFromServer,
+    findInitialCustomBuilding,
+} from '@/types/custom-building';
+import type { CustomBuilding } from '@/types/custom-building';
 import { defaultPortalFrameDesign } from '@/types/portal-frame';
 import type { ServerBuilding } from '@/types/scene';
 
@@ -68,5 +72,66 @@ describe('customBuildingFromServer', () => {
 
         expect(customBuilding.portalFrame.span).toBe(30);
         expect(customBuilding.persisted?.schemeId).toBe(101);
+    });
+});
+
+describe('findInitialCustomBuilding', () => {
+    const makeBuilding = (
+        id: string,
+        options: { slug?: string; placed?: boolean } = {},
+    ): CustomBuilding => ({
+        id,
+        origin: options.placed ? [-1.9, 52.4] : null,
+        altitude: 0,
+        rotation: [0, 0, 0],
+        portalFrame: defaultPortalFrameDesign(),
+        ...(options.slug
+            ? {
+                  persisted: {
+                      buildingId: 1,
+                      buildingSlug: options.slug,
+                      projectSlug: 'riverside-depot',
+                      schemeId: null,
+                      name: options.slug,
+                      addressLabel: null,
+                  },
+              }
+            : {}),
+    });
+
+    it('prefers the focused building even when it has no location', () => {
+        const buildings = [
+            makeBuilding('server-1', { slug: 'shed-a', placed: true }),
+            makeBuilding('server-2', { slug: 'shed-b' }),
+        ];
+
+        expect(findInitialCustomBuilding(buildings, 'shed-b')?.id).toBe(
+            'server-2',
+        );
+    });
+
+    it('falls back to the first placed persisted building', () => {
+        const buildings = [
+            makeBuilding('draft-1', { placed: true }),
+            makeBuilding('server-1', { slug: 'shed-a' }),
+            makeBuilding('server-2', { slug: 'shed-b', placed: true }),
+        ];
+
+        expect(findInitialCustomBuilding(buildings)?.id).toBe('server-2');
+    });
+
+    it('activates a saved building without a location so placement updates it', () => {
+        const buildings = [
+            makeBuilding('draft-1', { placed: true }),
+            makeBuilding('server-1', { slug: 'shed-a' }),
+        ];
+
+        expect(findInitialCustomBuilding(buildings)?.id).toBe('server-1');
+    });
+
+    it('returns null when no building has been persisted', () => {
+        expect(
+            findInitialCustomBuilding([makeBuilding('draft-1')], 'shed-a'),
+        ).toBeNull();
     });
 });

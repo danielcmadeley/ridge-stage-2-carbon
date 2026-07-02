@@ -20,8 +20,8 @@ Laravel 13 + Inertia v3 + Vue 3 SPA for designing steel portal frame buildings a
 ## Where things live
 
 - Backend: `app/Actions/Schemes/SaveScheme.php` (save flow), `app/Services/PortalFrame/` (geometry + P399 section lookup), `app/Http/Resources/` (Project/Building/Scheme shapes — mirrored by the TS types in `resources/js/types/scene.ts`), `app/Services/ExportBuildingIfc.php` (IFC export).
-- Frontend: pages in `resources/js/pages` (`Dashboard.vue`, `Scene.vue`); the scene editor UI in `resources/js/components/scene` (`BuildingEditorPanel.vue` is the main editor); MapLibre map in `resources/js/lib/map` + `useUkMap3d`; save client in `resources/js/lib/building/save-scheme.ts`; Typst PDF reports via `useTypstPdfExport`.
-- Buildings without a location are excluded from map rendering via `isPlacedOnMap()` (`resources/js/types/custom-building.ts`) — keep that guard when touching map code.
+- Frontend: pages in `resources/js/pages` (`Dashboard.vue`, `Scene.vue`); the scene editor UI in `resources/js/components/scene` (`BuildingEditorPanel.vue` orchestrates state/saving; its editor tabs are separate components — `FramePropertiesTab.vue`, `AnalyticalViewTab.vue`, `FoundationPropertiesTab.vue`, `LocationTab.vue`); the dashboard's project → building → scheme tree in `resources/js/components/dashboard` (`ProjectCard.vue` → `BuildingCard.vue` → `SchemeRow.vue`); MapLibre map in `resources/js/lib/map` + `useUkMap3d`; save client in `resources/js/lib/building/save-scheme.ts`; Typst PDF reports via `useTypstPdfExport`.
+- Buildings without a location are excluded from map rendering via `isPlacedOnMap()` (`resources/js/types/custom-building.ts`) — keep that guard when touching map code. The editor's initial active building is chosen by `findInitialCustomBuilding()` in the same file (focused building first, then placed persisted, then any persisted).
 
 ## Commands
 
