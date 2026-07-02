@@ -25,7 +25,7 @@ describe('buildCarbonReportTypstSource', () => {
         });
 
         expect(source).toContain('paper: "a3"');
-        expect(source).toContain('= Embodied Carbon Report');
+        expect(source).toContain('= Embodied carbon report');
         expect(source).toContain('== Visual overview');
         expect(source).toContain('== Primary frame comparison');
         expect(source).toContain('== Detailed element data');
@@ -33,6 +33,13 @@ describe('buildCarbonReportTypstSource', () => {
         expect(source).toContain('chart.piechart');
         expect(source).toContain('chart.columnchart');
         expect(source).toContain('chart.barchart');
+        expect(source).toContain('#let stat-card');
+        expect(source).toContain('#let chart-card');
+        expect(source).toContain('[By material]');
+        expect(source).toContain('legend: (label: none)');
+        expect(source).toContain('[By element]');
+        expect(source).toContain('ridge.co.uk');
+        expect(source).toContain('Portal frame design and carbon');
         expect(source).toContain(
             formatCarbonReportCarbon(carbon.totalCarbonKg),
         );

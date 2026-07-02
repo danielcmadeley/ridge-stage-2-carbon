@@ -97,40 +97,24 @@ describe('sizeFoundation', () => {
         expect(result.pileCap?.pileSpacingM).toBeCloseTo(0.45 * 3);
     });
 
-    it('grows the mass pad to resist an increased horizontal reaction', () => {
+    it('grows the mass pad when wind exposure increases with eaves height', () => {
         const reaction = defaultReaction();
-        const design = designFor('mass_filled');
-        const base = sizeFoundation(reaction, design);
-        const pushed = sizeFoundation(
-            {
-                ...reaction,
-                fxKn: reaction.fxKn * 2,
-            },
-            design,
-        );
+        const lowDesign = {
+            ...designFor('mass_filled'),
+            eavesHeight: 4,
+        };
+        const highDesign = {
+            ...designFor('mass_filled'),
+            eavesHeight: 10,
+        };
+        const low = sizeFoundation(reaction, lowDesign);
+        const high = sizeFoundation(reaction, highDesign);
 
-        const baseSliding = base.checks.find(
-            (check) => check.label === 'Sliding DA1-C2 (passive incl.)',
-        );
-        const pushedSliding = pushed.checks.find(
-            (check) => check.label === 'Sliding DA1-C2 (passive incl.)',
-        );
+        const lowVolume = low.dimensions.widthM ** 2 * low.dimensions.heightM;
+        const highVolume =
+            high.dimensions.widthM ** 2 * high.dimensions.heightM;
 
-        // The sizer is an optimizer-to-feasibility: doubling the horizontal
-        // reaction makes it grow the pad (plan and/or depth) until sliding and
-        // every other limit state pass again. So both results remain feasible
-        // (governing utilisation at or below unity) while the concrete volume
-        // grows to accommodate the larger load \u2014 rather than the detached
-        // utilisation number itself, which always hugs the governing boundary.
-        expect(baseSliding?.utilisation).toBeLessThanOrEqual(1);
-        expect(pushedSliding?.utilisation).toBeLessThanOrEqual(1);
-        expect(pushedSliding?.utilisation).toBeGreaterThan(0);
-
-        const baseVolume =
-            base.dimensions.widthM ** 2 * base.dimensions.heightM;
-        const pushedVolume =
-            pushed.dimensions.widthM ** 2 * pushed.dimensions.heightM;
-        expect(pushedVolume).toBeGreaterThanOrEqual(baseVolume);
+        expect(highVolume).toBeGreaterThan(lowVolume);
     });
 
     it('handles pinned-base moments without invalid values', () => {
@@ -151,6 +135,48 @@ describe('sizeFoundation', () => {
         expect(
             result.checks.every((check) => Number.isFinite(check.utilisation)),
         ).toBe(true);
+    });
+
+    it('matches reinforced pad and mass-filled geometry at moderate portal frame reactions', () => {
+        const reaction = defaultReaction();
+        const pad = sizeFoundation(reaction, designFor('reinforced_pad'));
+        const mass = sizeFoundation(reaction, designFor('mass_filled'));
+
+        expect(pad.dimensions).toEqual(mass.dimensions);
+        expect(
+            mass.checks.find(
+                (check) => check.label === 'Plain footing projection a ≤ a_max',
+            )?.utilisation,
+        ).toBeLessThan(1);
+    });
+
+    it('sizes mass-filled larger than reinforced pad under heavy column loads', () => {
+        const reaction: SupportReaction = {
+            fxKn: 0,
+            fzKn: 250,
+            momentKnm: 0,
+        };
+        const heavyDesign = {
+            ...designFor('reinforced_pad'),
+            eavesHeight: 10,
+            span: 40,
+        };
+        const pad = sizeFoundation(reaction, heavyDesign);
+        const mass = sizeFoundation(reaction, {
+            ...heavyDesign,
+            foundation: {
+                ...heavyDesign.foundation,
+                type: 'mass_filled' as const,
+            },
+        });
+
+        expect(mass.dimensions.widthM).toBeGreaterThan(pad.dimensions.widthM);
+        expect(mass.dimensions.heightM).toBeGreaterThan(pad.dimensions.heightM);
+        expect(
+            mass.checks.find(
+                (check) => check.label === 'Plain footing projection a ≤ a_max',
+            )?.utilisation,
+        ).toBeGreaterThan(0.95);
     });
 
     it('sizes left and right foundation reactions', () => {

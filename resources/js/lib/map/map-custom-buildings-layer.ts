@@ -6,6 +6,7 @@ import type {
 } from 'maplibre-gl';
 import type { Group } from 'three';
 import {
+    AmbientLight,
     Camera,
     DirectionalLight,
     Matrix4,
@@ -134,11 +135,13 @@ class CustomBuildingsLayerImpl implements CustomBuildingsLayer {
         this.camera = new Camera();
         this.scene = new Scene();
 
+        this.scene.add(new AmbientLight(0xffffff, 0.65));
+
         const lightA = new DirectionalLight(0xffffff, 1.2);
         lightA.position.set(0, -70, 100).normalize();
         this.scene.add(lightA);
 
-        const lightB = new DirectionalLight(0xffffff, 0.8);
+        const lightB = new DirectionalLight(0xffffff, 0.85);
         lightB.position.set(0, 70, 100).normalize();
         this.scene.add(lightB);
 

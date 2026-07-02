@@ -6,12 +6,14 @@ import {
     createFrameMemberSteelMaterial,
     createGalvanizedSteelMaterial,
     createRedOxideSteelMaterial,
+    createSlabMaterial,
 } from '@/lib/portal-frame/rendering/portal-frame-materials';
 import { findZSection } from '@/lib/portal-frame/sections/z-sections';
 import type { FrameMember } from '@/types/portal-frame';
 import {
     PORTAL_FRAME_FOUNDATION_COLOR,
     PORTAL_FRAME_SECONDARY_STEEL_COLOR,
+    PORTAL_FRAME_SLAB_COLOR,
     PORTAL_FRAME_STEEL_COLOR,
 } from '@/types/portal-frame';
 
@@ -23,8 +25,8 @@ describe('portal frame materials', () => {
         expect(material.color.getHexString()).toBe(
             PORTAL_FRAME_STEEL_COLOR.replace('#', ''),
         );
-        expect(material.metalness).toBeLessThan(0.3);
-        expect(material.roughness).toBeGreaterThan(0.65);
+        expect(material.metalness).toBeLessThan(0.25);
+        expect(material.roughness).toBeLessThan(0.7);
     });
 
     it('uses reflective galvanized steel for secondary members', () => {
@@ -33,18 +35,28 @@ describe('portal frame materials', () => {
         expect(material.color.getHexString()).toBe(
             PORTAL_FRAME_SECONDARY_STEEL_COLOR.replace('#', ''),
         );
-        expect(material.metalness).toBeGreaterThan(0.5);
-        expect(material.roughness).toBeLessThan(0.5);
+        expect(material.metalness).toBeGreaterThan(0.4);
+        expect(material.roughness).toBeLessThan(0.4);
     });
 
-    it('uses warm concrete for foundations and slabs', () => {
+    it('uses dark grey concrete for foundations', () => {
         const material = createConcreteMaterial();
 
         expect(material.color.getHexString()).toBe(
             PORTAL_FRAME_FOUNDATION_COLOR.replace('#', ''),
         );
         expect(material.metalness).toBe(0);
-        expect(material.roughness).toBeGreaterThan(0.9);
+        expect(material.roughness).toBeLessThan(0.8);
+    });
+
+    it('uses lighter grey concrete for the ground floor slab', () => {
+        const material = createSlabMaterial();
+
+        expect(material.color.getHexString()).toBe(
+            PORTAL_FRAME_SLAB_COLOR.replace('#', ''),
+        );
+        expect(material.transparent).toBe(true);
+        expect(material.opacity).toBe(0.92);
     });
 
     it('selects galvanized material for purlins and side rails', () => {

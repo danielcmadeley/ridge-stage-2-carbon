@@ -1,4 +1,6 @@
+import { CHART_CATEGORICAL_PALETTE } from '@/components/ui/chart/chart-colors';
 import type { PortalFrameCarbon } from '@/lib/portal-frame/carbon/carbon';
+import type { ScorsBand } from '@/lib/portal-frame/carbon/scors';
 import type { FoundationSizingResult } from '@/lib/portal-frame/foundation/foundation-sizing';
 import type { BuiltPortalFrame } from '@/lib/portal-frame/model/geometry-builder';
 import {
@@ -21,6 +23,73 @@ const foundationTypeLabels: Record<FoundationType, string> = {
     reinforced_pad: 'Reinforced pad',
     mass_filled: 'Mass-filled',
 };
+
+const scorsBandColors: Record<ScorsBand, { fill: string; text: string }> = {
+    A: { fill: '#16a34a', text: '#ffffff' },
+    B: { fill: '#22c55e', text: '#ffffff' },
+    C: { fill: '#84cc16', text: '#ffffff' },
+    D: { fill: '#eab308', text: '#000000' },
+    E: { fill: '#f97316', text: '#ffffff' },
+    F: { fill: '#ef4444', text: '#ffffff' },
+    G: { fill: '#b91c1c', text: '#ffffff' },
+};
+
+type ChartDatum = {
+    label: string;
+    carbonKg: number;
+};
+
+function groupElementChartData(
+    elements: ChartDatum[],
+    topN = 7,
+): ChartDatum[] {
+    const ranked = [...elements]
+        .filter((element) => element.carbonKg > 0)
+        .sort((left, right) => right.carbonKg - left.carbonKg);
+    const top = ranked.slice(0, topN);
+    const otherCarbon = ranked
+        .slice(topN)
+        .reduce((total, element) => total + element.carbonKg, 0);
+
+    if (otherCarbon > 0) {
+        top.push({ label: 'Other', carbonKg: otherCarbon });
+    }
+
+    return top;
+}
+
+function typstChartLegend(
+    items: ChartDatum[],
+    totalCarbonKg: number,
+): string {
+    if (items.length === 0) {
+        return '';
+    }
+
+    const rows = items
+        .map((item, index) => {
+            const share =
+                totalCarbonKg > 0
+                    ? (item.carbonKg / totalCarbonKg) * 100
+                    : 0;
+            const color =
+                CHART_CATEGORICAL_PALETTE[
+                    index % CHART_CATEGORICAL_PALETTE.length
+                ];
+
+            return `  [#circle(radius: 4pt, fill: rgb("${color}"))], [#text(size: 8.5pt)[${escapeTypstContent(item.label)}]], [#text(size: 8.5pt, fill: ridge-muted)[${formatNumber(share, 0)}%]],`;
+        })
+        .join('\n');
+
+    return `#v(0.6em)
+#grid(
+  columns: (auto, 1fr, auto),
+  row-gutter: 6pt,
+  column-gutter: 8pt,
+${rows}
+)
+`;
+}
 
 export type CarbonReportInput = {
     carbon: PortalFrameCarbon;
@@ -83,6 +152,14 @@ function chartCanvasWidth(paperSize: TypstPaperSize): number {
 
 function chartDimension(value: number): string {
     return value.toFixed(2);
+}
+
+function cardPieChartRadius(paperSize: TypstPaperSize): string {
+    return paperSize === 'a3' ? '2.80' : '1.90';
+}
+
+function cardPieInnerRadius(paperSize: TypstPaperSize): string {
+    return paperSize === 'a3' ? '0.80' : '0.55';
 }
 
 function foundationCheckRows(result: FoundationSizingResult): string {
@@ -160,16 +237,13 @@ function buildFoundationSizingSection(
     ] as const satisfies { heading: string; result: FoundationSizingResult }[];
 
     const blocks = sides.map(({ heading, result }) => {
-        const infoTable = `#table(
+        const infoTable = `#data-table(
   columns: (1.4fr, 1fr),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (left, right),
 ${foundationInfoRows(result)})
 `;
-        const checksTable = `#table(
+        const checksTable = `#data-table(
   columns: (1.6fr, auto, auto, auto, auto),
-  stroke: 0.5pt + ridge-dark,
   inset: 6pt,
   align: (left, right, right, right, right),
   table.header([*Check*], [*Demand*], [*Capacity*], [*Unit*], [*Util*]),
@@ -213,15 +287,32 @@ export function buildCarbonReportTypstSource(input: CarbonReportInput): string {
     const analytics = buildCarbonReportAnalytics(carbon);
     const chartWidth = chartCanvasWidth(paperSize);
     const halfChartWidth = chartWidth / 2 - 0.5;
-    const pieRadius = chartDimension(halfChartWidth / 2.2);
-    const pieInnerRadius = chartDimension(halfChartWidth / 6);
+    const cardPieRadius = cardPieChartRadius(paperSize);
+    const cardPieInner = cardPieInnerRadius(paperSize);
+    const scorsColors = scorsBandColors[carbon.scorsBand];
 
-    const elementChartData = typstChartDataRows(
-        analytics.elements.filter((element) => element.carbonKg > 0),
+    const materialChartItems = analytics.categories.filter(
+        (category) => category.carbonKg > 0,
     );
-    const categoryChartData = typstChartDataRows(analytics.categories);
+    const elementChartItems = groupElementChartData(
+        analytics.elements.map((element) => ({
+            label: element.label,
+            carbonKg: element.carbonKg,
+        })),
+    );
+
+    const elementChartData = typstChartDataRows(elementChartItems);
+    const categoryChartData = typstChartDataRows(materialChartItems);
     const primaryChartData = typstChartDataRows(analytics.primaryFrameElements);
     const topContributorData = typstChartDataRows(analytics.topContributors);
+    const materialLegend = typstChartLegend(
+        materialChartItems,
+        carbon.totalCarbonKg,
+    );
+    const elementLegend = typstChartLegend(
+        elementChartItems,
+        carbon.totalCarbonKg,
+    );
 
     const detailedRows = analytics.elements
         .map((element) =>
@@ -290,8 +381,11 @@ export function buildCarbonReportTypstSource(input: CarbonReportInput): string {
 
 #let ridge-dark = rgb("#003723")
 #let ridge-mid = rgb("#005032")
-#let ridge-accent = rgb("#C6128F")
-#let ridge-muted = luma(140)
+#let ridge-fuchsia = rgb("#c6128f")
+#let ridge-grey = rgb("#e4e4e4")
+#let ridge-muted = rgb("#003723").transparentize(40%)
+#let ridge-border = rgb("#003723").transparentize(90%)
+#let ridge-surface = rgb("#e4e4e4").transparentize(65%)
 #let ridge-pale = rgb("#e8f3ec")
 #let ridge-green-colors = (
   ridge-dark,
@@ -304,17 +398,11 @@ export function buildCarbonReportTypstSource(input: CarbonReportInput): string {
 )
 #let chart-colors = (
   ..ridge-green-colors,
-  ridge-accent,
+  ridge-fuchsia,
   rgb("#64748b"),
   rgb("#94a3b8"),
   rgb("#cbd5e1"),
-  rgb("#475569"),
-  rgb("#334155"),
-  rgb("#0f766e"),
-  rgb("#0891b2"),
-  rgb("#7c3aed"),
 )
-
 #let pie-colors = (
   rgb("#86efac"),
   rgb("#f9a8d4"),
@@ -328,143 +416,253 @@ export function buildCarbonReportTypstSource(input: CarbonReportInput): string {
   rgb("#fde047"),
 )
 #let pie-slice-style = (idx) => (fill: pie-colors.at(calc.rem(idx, pie-colors.len())), stroke: none)
-#let chart-gradient = gradient.linear(..chart-colors)
 #let chart-bar-style = (idx) => (fill: chart-colors.at(calc.rem(idx, chart-colors.len())), stroke: none)
+
+#let eyebrow(content) = text(
+  size: 8pt,
+  fill: ridge-fuchsia,
+  weight: "medium",
+  tracking: 0.12em,
+)[#upper(content)]
+
+#let stat-card(label, value, detail: none) = block(
+  width: 100%,
+  stroke: 0.5pt + ridge-border,
+  fill: ridge-surface,
+  radius: 6pt,
+  inset: 10pt,
+)[
+  #text(size: 8pt, fill: ridge-muted)[#label]
+  #v(0.25em)
+  #text(size: 13pt, weight: "bold", fill: ridge-dark)[#value]
+  #if detail != none [
+    #v(0.15em)
+    #text(size: 7.5pt, fill: ridge-muted)[#detail]
+  ]
+]
+
+#let chart-card(title, description, body) = block(
+  width: 100%,
+  stroke: 0.5pt + ridge-border,
+  fill: white,
+  radius: 8pt,
+  inset: 12pt,
+)[
+  #text(size: 10pt, weight: "bold", fill: ridge-mid)[#title]
+  #v(0.25em)
+  #text(size: 8.5pt, fill: ridge-muted)[#description]
+  #v(0.6em)
+  #body
+]
+
+#let section-intro(title, description) = [
+  #text(size: 14pt, weight: "bold", fill: ridge-dark)[#title]
+  #v(0.35em)
+  #text(size: 9.5pt, fill: ridge-muted)[#description]
+  #v(0.9em)
+]
+
+#let data-table(..args) = table(
+  stroke: 0.5pt + ridge-border,
+  inset: 8pt,
+  fill: (x, y) => if y == 0 { ridge-surface } else { white },
+  ..args,
+)
 
 #set page(
   paper: "${paperSize}",
-  margin: (top: 2cm, bottom: 2cm, left: 2cm, right: 2cm),
+  margin: (top: 2.2cm, bottom: 2cm, left: 2cm, right: 2cm),
   fill: white,
   header: [
     #line(length: 100%, stroke: 2pt + ridge-dark)
-    #v(0.4em)
+    #v(0.35em)
     #grid(
-      columns: (1fr, auto),
-      text(size: 9pt, fill: ridge-muted)[Detailed embodied carbon report],
-      align(right)[
-        #text(size: 9pt, fill: ridge-muted)[${formatReportDate(generatedAt)}]
-      ],
+      columns: (auto, 1fr, auto),
+      column-gutter: 10pt,
+      align: (left + horizon, left + horizon, right + horizon),
+      text(size: 11pt, weight: "bold", fill: ridge-dark)[Ridge],
+      text(size: 8.5pt, fill: ridge-muted)[Portal frame design and carbon · Embodied carbon report],
+      text(size: 8.5pt, fill: ridge-muted)[${formatReportDate(generatedAt)}],
     )
   ],
   footer: context [
-    #align(right)[
-      #text(size: 9pt, fill: ridge-muted)[#counter(page).display()]
-    ]
+    #line(length: 100%, stroke: 0.5pt + ridge-border)
+    #v(0.35em)
+    #grid(
+      columns: (1fr, auto),
+      text(size: 8pt, fill: ridge-muted)[Portal frame design and carbon · ridge.co.uk],
+      text(size: 8pt, fill: ridge-muted)[#counter(page).display()],
+    )
   ],
 )
 
 #set text(size: 10pt)
-#set par(justify: true, leading: 0.65em, spacing: 0.65em)
-#show heading.where(level: 1): set text(size: 18pt, weight: "bold", fill: ridge-dark)
-#show heading.where(level: 2): set text(size: 12pt, weight: "bold", fill: ridge-mid)
+#set par(justify: true, leading: 0.68em, spacing: 0.68em)
+#show heading.where(level: 1): set text(size: 22pt, weight: "bold", fill: ridge-dark)
+#show heading.where(level: 2): set text(size: 13pt, weight: "bold", fill: ridge-dark)
 #show heading.where(level: 3): set text(size: 11pt, weight: "bold", fill: ridge-mid)
 
-= Embodied Carbon Report
+#eyebrow[Embodied carbon report]
 
-#block(
-  fill: ridge-pale,
-  inset: 12pt,
-  radius: 4pt,
-  width: 100%,
-)[
-  #grid(
-    columns: (1fr, 1fr, 1fr, auto),
-    gutter: 12pt,
-    align: (left, left, left, center),
-    [
-      #text(size: 9pt, fill: ridge-muted)[Total embodied carbon]
-      #v(0.2em)
-      #text(size: 16pt, weight: "bold", fill: ridge-dark)[${formatCarbonReportCarbon(carbon.totalCarbonKg)}]
-    ],
-    [
-      #text(size: 9pt, fill: ridge-muted)[Carbon intensity]
-      #v(0.2em)
-      #text(size: 16pt, weight: "bold", fill: ridge-dark)[${formatNumber(carbon.carbonIntensityKgM2, 0)} kgCO2e/m²]
-      #v(0.1em)
-      #text(size: 8pt, fill: ridge-muted)[${formatNumber(carbon.floorAreaM2, 0)} m² GIFA]
-    ],
-    [
-      #text(size: 9pt, fill: ridge-muted)[Primary steel sections]
-      #v(0.2em)
-      #text(size: 16pt, weight: "bold", fill: ridge-dark)[${formatCarbonReportCarbon(carbon.steelSectionsCarbonKg)}]
-      #v(0.1em)
-      #text(size: 8pt, fill: ridge-muted)[excl. connections allowance]
-    ],
-    [
-      #align(center)[
-        #box(
-          fill: ridge-dark,
-          inset: (x: 12pt, y: 8pt),
-          radius: 4pt,
-        )[
-          #text(size: 20pt, weight: "bold", fill: white)[${carbon.scorsBand}]
-        ]
-        #v(0.2em)
-        #text(size: 8pt, fill: ridge-muted)[IStructE SCORS]
-      ]
-    ],
-  )
+#v(0.4em)
+
+= Embodied carbon report
+
+#v(0.35em)
+
+#text(size: 10.5pt, fill: ridge-muted)[
+  A1–A3 estimate from element mass × factor. Includes a 250 mm ground floor slab with H12 top and bottom at 200 mm centres, plus 10% steel for connections. Use this report to compare schemes and identify the elements driving embodied carbon.
 ]
 
 #v(0.8em)
-#text(fill: ridge-muted)[
-  A1–A3 estimate from element mass × factor. Includes a 250 mm ground floor slab with H12 top and bottom at 200 mm centres, plus 10% steel for connections. Use this report to compare schemes and identify the elements driving embodied carbon.
+
+#grid(
+  columns: (auto, auto),
+  column-gutter: 8pt,
+  [
+    #box(
+      fill: ridge-dark,
+      inset: (x: 10pt, y: 5pt),
+      radius: 999pt,
+    )[
+      #text(size: 8pt, fill: white)[${formatCarbonReportCarbon(carbon.totalCarbonKg)}]
+    ]
+  ],
+  [
+    #box(
+      fill: white,
+      stroke: 0.5pt + ridge-border,
+      inset: (x: 10pt, y: 5pt),
+      radius: 999pt,
+    )[
+      #text(size: 8pt, fill: ridge-dark)[${formatNumber(design.span, 0)} m span · ${formatNumber(carbon.floorAreaM2, 0)} m² GIFA]
+    ]
+  ],
+)
+
+#v(0.9em)
+
+#grid(
+  columns: (1fr, 1fr),
+  row-gutter: 10pt,
+  column-gutter: 10pt,
+  stat-card(
+    [Total embodied carbon],
+    [${formatCarbonReportCarbon(carbon.totalCarbonKg)}],
+  ),
+  stat-card(
+    [Carbon intensity],
+    [${formatNumber(carbon.carbonIntensityKgM2, 0)} kgCO2e/m²],
+    detail: [${formatNumber(carbon.floorAreaM2, 0)} m² GIFA],
+  ),
+  stat-card(
+    [Primary steel sections],
+    [${formatCarbonReportCarbon(carbon.steelSectionsCarbonKg)}],
+    detail: [excl. connections allowance],
+  ),
+  [
+    #block(
+      width: 100%,
+      stroke: 0.5pt + ridge-border,
+      fill: ridge-surface,
+      radius: 6pt,
+      inset: 10pt,
+    )[
+      #align(center)[
+        #text(size: 8pt, fill: ridge-muted)[IStructE SCORS]
+        #v(0.3em)
+        #box(
+          fill: rgb("${scorsColors.fill}"),
+          inset: (x: 14pt, y: 8pt),
+          radius: 6pt,
+        )[
+          #text(size: 22pt, weight: "bold", fill: rgb("${scorsColors.text}"))[${carbon.scorsBand}]
+        ]
+      ]
+    ]
+  ],
+)
+
+#v(0.8em)
+
+#block(
+  width: 100%,
+  stroke: 0.5pt + ridge-border,
+  fill: ridge-surface,
+  radius: 6pt,
+  inset: 10pt,
+)[
+  #grid(
+    columns: (1fr, auto),
+    text(size: 8.5pt, fill: ridge-muted)[Steel sections subtotal],
+    text(size: 9pt, weight: "bold", fill: ridge-dark)[${formatCarbonReportCarbon(carbon.steelSectionsCarbonKg)}],
+  )
 ]
 
 #pagebreak()
 
 == Visual overview
 
-The charts below show where carbon is concentrated across individual elements and broader material groups. Use them to compare alternative schemes and spot disproportionate contributors.
+#section-intro(
+  [Where carbon is concentrated],
+  [Charts grouped by material category and individual element, matching the scene editor panel. Use them to compare alternative schemes and spot disproportionate contributors.],
+)
 
 #grid(
   columns: (1fr, 1fr),
-  gutter: 16pt,
-  [
-    #text(weight: "bold", fill: ridge-mid)[Carbon by element]
-    #v(0.4em)
-    #canvas({
-      draw.set-style(legend: (fill: white, stroke: 0.5pt + ridge-muted))
-      chart.piechart(
-        (
-${elementChartData}        ),
-        label-key: 0,
-        value-key: 1,
-        radius: ${pieRadius},
-        slice-style: pie-slice-style,
-        stroke: 0.5pt + white,
-        inner-radius: ${pieInnerRadius},
-        outer-label: (content: "%", radius: 110%),
-      )
-    })
-  ],
-  [
-    #text(weight: "bold", fill: ridge-mid)[Carbon by material group]
-    #v(0.4em)
-    #canvas({
-      draw.set-style(legend: (fill: white, stroke: 0.5pt + ridge-muted))
-      chart.piechart(
-        (
-${categoryChartData}        ),
-        label-key: 0,
-        value-key: 1,
-        radius: ${pieRadius},
-        slice-style: pie-slice-style,
-        stroke: 0.5pt + white,
-        inner-radius: ${pieInnerRadius},
-        outer-label: (content: "%", radius: 110%),
-      )
-    })
-  ],
+  gutter: 12pt,
+  chart-card(
+    [By material],
+    [Carbon grouped into structural material categories.],
+    [
+      #align(center)[
+        #canvas(length: 1cm, {
+          chart.piechart(
+            (
+${categoryChartData}            ),
+            label-key: none,
+            value-key: 1,
+            radius: ${cardPieRadius},
+            slice-style: pie-slice-style,
+            stroke: 0.5pt + white,
+            outer-label: (content: none),
+            legend: (label: none),
+          )
+        })
+      ]
+${materialLegend}    ],
+  ),
+  chart-card(
+    [By element],
+    [Largest individual contributors to embodied carbon.],
+    [
+      #align(center)[
+        #canvas(length: 1cm, {
+          chart.piechart(
+            (
+${elementChartData}            ),
+            label-key: none,
+            value-key: 1,
+            radius: ${cardPieRadius},
+            slice-style: pie-slice-style,
+            stroke: 0.5pt + white,
+            inner-radius: ${cardPieInner},
+            outer-label: (content: none),
+            legend: (label: none),
+          )
+        })
+      ]
+${elementLegend}    ],
+  ),
 )
 
-#v(1.5em)
+#v(1.2em)
 
 === Total carbon by element
 
 #canvas({
   draw.set-style(
-    legend: (fill: white, stroke: 0.5pt + ridge-muted),
+    legend: (fill: white, stroke: 0.5pt + ridge-border),
     columnchart: (bar-width: 0.75),
   )
   chart.columnchart(
@@ -483,52 +681,58 @@ ${elementChartData}    ),
 
 == Primary frame comparison
 
-Columns, rafters, gable columns, and haunches usually dominate the primary steel takeoff. Compare their relative contributions before reviewing secondary steel, foundations, or slab scope.
+#section-intro(
+  [Primary steel members],
+  [Columns, rafters, gable columns, and haunches usually dominate the primary steel takeoff. Compare their relative contributions before reviewing secondary steel, foundations, or slab scope.],
+)
 
 #grid(
   columns: (1fr, 1fr),
-  gutter: 16pt,
-  [
-    #text(weight: "bold", fill: ridge-mid)[Primary members — horizontal bars]
-    #v(0.4em)
-    #canvas({
-      draw.set-style(columnchart: (bar-width: 0.7))
-      chart.barchart(
-        (
-${primaryChartData}        ),
-        size: (${chartDimension(halfChartWidth)}, 5.5),
-        label-key: 0,
-        value-key: 1,
-        x-label: [Carbon (tCO2e)],
-        y-label: none,
-        bar-style: chart-bar-style,
-      )
-    })
-  ],
-  [
-    #text(weight: "bold", fill: ridge-mid)[Top five contributors]
-    #v(0.4em)
-    #canvas({
-      draw.set-style(columnchart: (bar-width: 0.7))
-      chart.columnchart(
-        (
-${topContributorData}        ),
-        size: (${chartDimension(halfChartWidth)}, 5.5),
-        label-key: 0,
-        value-key: 1,
-        x-label: none,
-        y-label: [Carbon (tCO2e)],
-        bar-style: chart-bar-style,
-      )
-    })
-  ],
+  gutter: 12pt,
+  chart-card(
+    [Primary members],
+    [Horizontal bars comparing frame member carbon.],
+    [
+      #canvas({
+        draw.set-style(columnchart: (bar-width: 0.7))
+        chart.barchart(
+          (
+${primaryChartData}          ),
+          size: (${chartDimension(halfChartWidth)}, 5.5),
+          label-key: 0,
+          value-key: 1,
+          x-label: [Carbon (tCO2e)],
+          y-label: none,
+          bar-style: chart-bar-style,
+        )
+      })
+    ],
+  ),
+  chart-card(
+    [Top five contributors],
+    [Highest absolute carbon lines across all elements.],
+    [
+      #canvas({
+        draw.set-style(columnchart: (bar-width: 0.7))
+        chart.columnchart(
+          (
+${topContributorData}          ),
+          size: (${chartDimension(halfChartWidth)}, 5.5),
+          label-key: 0,
+          value-key: 1,
+          x-label: none,
+          y-label: [Carbon (tCO2e)],
+          bar-style: chart-bar-style,
+        )
+      })
+    ],
+  ),
 )
 
 #v(1em)
-#table(
+
+#data-table(
   columns: (1.2fr, auto, auto, auto),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (left, right, right, right),
   table.header(
     [*Primary member*], [*Mass*], [*Carbon*], [*Share of total*],
@@ -549,11 +753,13 @@ ${analytics.primaryFrameElements
 
 == Detailed element data
 
-This table is intended for benchmarking against other buildings. It shows mass, carbon factor, absolute carbon, share of total, cumulative share, and carbon intensity per m² of gross internal floor area for every modelled element.
+#section-intro(
+  [Benchmarking table],
+  [Mass, carbon factor, absolute carbon, share of total, cumulative share, and carbon intensity per m² of gross internal floor area for every modelled element.],
+)
 
-#table(
+#data-table(
   columns: (1.3fr, auto, auto, auto, auto, auto, auto),
-  stroke: 0.5pt + ridge-dark,
   inset: 6pt,
   align: (left, right, right, right, right, right, right),
   table.header(
@@ -565,17 +771,15 @@ ${detailedRows})
 
 == Material groups
 
-#table(
+#data-table(
   columns: (1.6fr, auto, auto, auto),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (left, right, right, right),
   table.header(
     [*Group*], [*Mass*], [*Carbon*], [*Share*],
   ),
 ${categoryRows})
 
-#v(1.5em)
+#v(1.2em)
 
 #canvas({
   draw.set-style(columnchart: (bar-width: 0.65))
@@ -595,44 +799,54 @@ ${categoryChartData}    ),
 
 == Improvement focus
 
-Ranked by absolute carbon contribution. Start with the highest lines when optimising section sizes, spacing, foundation assumptions, or slab scope.
+#section-intro(
+  [Optimisation priorities],
+  [Ranked by absolute carbon contribution. Start with the highest lines when optimising section sizes, spacing, foundation assumptions, or slab scope.],
+)
 
-#table(
+#data-table(
   columns: (auto, 1.1fr, 2fr),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (center, left, left),
   table.header(
     [*Rank*], [*Contributor*], [*What to review*],
   ),
 ${improvementRows})
 
-#v(1.5em)
+#v(1.2em)
 
-=== Quick observations
+#block(
+  width: 100%,
+  stroke: 0.5pt + ridge-border,
+  fill: ridge-pale,
+  radius: 8pt,
+  inset: 12pt,
+)[
+  #text(size: 10pt, weight: "bold", fill: ridge-mid)[Quick observations]
+  #v(0.5em)
+  ${analytics.topContributors
+      .slice(0, 3)
+      .map(
+          (element, index) =>
+              `- #strong[${escapeTypstContent(`${index + 1}. ${element.label}`)}] contributes ${formatNumber(element.sharePercent, 1)}% (${formatCarbonReportCarbon(element.carbonKg)}) of total carbon.`,
+      )
+      .join('\n  ')}
 
-${analytics.topContributors
-    .slice(0, 3)
-    .map(
-        (element, index) =>
-            `- #strong[${escapeTypstContent(`${index + 1}. ${element.label}`)}] contributes ${formatNumber(element.sharePercent, 1)}% (${formatCarbonReportCarbon(element.carbonKg)}) of total carbon.`,
-    )
-    .join('\n')}
-
-- #strong[Primary steel frame] accounts for ${formatNumber(analytics.categories.find((category) => category.category === 'primary_steel')?.sharePercent ?? 0, 1)}% of the total when columns, rafters, haunches, ties, and bracing are grouped together.
-- #strong[Ground floor slab] accounts for ${formatNumber(analytics.categories.find((category) => category.category === 'slab')?.sharePercent ?? 0, 1)}% — confirm whether slab scope should be included when comparing against other benchmarks.
-- ${nextBandNote}
+  - #strong[Primary steel frame] accounts for ${formatNumber(analytics.categories.find((category) => category.category === 'primary_steel')?.sharePercent ?? 0, 1)}% of the total when columns, rafters, haunches, ties, and bracing are grouped together.
+  - #strong[Ground floor slab] accounts for ${formatNumber(analytics.categories.find((category) => category.category === 'slab')?.sharePercent ?? 0, 1)}% — confirm whether slab scope should be included when comparing against other benchmarks.
+  - ${nextBandNote}
+]
 
 #pagebreak()
 
 == Design parameters
 
-Record these values when comparing alternative schemes or external benchmarks.
+#section-intro(
+  [Scheme inputs],
+  [Record these values when comparing alternative schemes or external benchmarks.],
+)
 
-#table(
+#data-table(
   columns: (1.4fr, 1fr),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (left, right),
 ${typstTableRow(['Span', `${formatNumber(design.span, 1)} m`])}${typstTableRow(['Building length', `${formatNumber(design.buildingLength, 1)} m`])}${typstTableRow(['Eaves height', `${formatNumber(design.eavesHeight, 1)} m`])}${typstTableRow(['Bay spacing', `${formatNumber(design.baySpacing, 1)} m`])}${typstTableRow(['Roof pitch', `${formatNumber(design.roofPitchDeg, 1)}°`])}${typstTableRow(['Dead load', `${formatNumber(design.deadLoadKnM2, 2)} kN/m²`])}${typstTableRow(['Services load', `${formatNumber(design.servicesLoadKnM2, 2)} kN/m²`])}${typstTableRow(['Live load', `${formatNumber(design.liveLoadKnM2, 2)} kN/m²`])}${typstTableRow(['Column restraint', design.columnRestraint === 'restrained' ? 'Restrained' : 'Unrestrained'])}${typstTableRow(['Foundation type', foundationTypeLabels[design.foundation.type]])}${typstTableRow(['Rafter section', frame.rafter.name])}${typstTableRow(['Column section', frame.column.name])}${typstTableRow(['Lookup span', `${formatNumber(frame.lookupSpanM, 0)} m`])}${typstTableRow(['Rafter line load (characteristic)', `${formatNumber(frame.rafterLineLoadKnM, 2)} kN/m`])}${typstTableRow(['Rafter line load (factored, γ_G·(dead+services) + γ_Q·live)', `${formatNumber(factoredRafterLineLoadKnM(design), 2)} kN/m`])}${typstTableRow(['Report date', formatReportDate(generatedAt)])}
 )
@@ -641,10 +855,13 @@ ${typstTableRow(['Span', `${formatNumber(design.span, 1)} m`])}${typstTableRow([
 ${foundationSection}
 == SCORS benchmarking
 
-#table(
+#section-intro(
+  [IStructE SCORS bands],
+  [Structural Carbon Rating Scheme bands in 50 kgCO2e/m² steps from a band-A ceiling of 150 kgCO2e/m².],
+)
+
+#data-table(
   columns: (auto, 1.4fr, auto, auto),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (center, left, center, right),
   table.header(
     [*Band*], [*Intensity range*], [*Status*], [*Headroom*],
@@ -655,10 +872,8 @@ ${scorsRows})
 
 == Summary results
 
-#table(
+#data-table(
   columns: (1.4fr, 1fr),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (left, right),
 ${typstTableRow(['Total embodied carbon', formatCarbonReportCarbon(carbon.totalCarbonKg)])}${typstTableRow(['Carbon intensity', `${formatNumber(carbon.carbonIntensityKgM2, 0)} kgCO2e/m²`])}${typstTableRow(['Gross internal floor area', `${formatNumber(carbon.floorAreaM2, 0)} m²`])}${typstTableRow(['IStructE SCORS band', carbon.scorsBand])}${typstTableRow(['Steel sections subtotal', formatCarbonReportCarbon(carbon.steelSectionsCarbonKg)])}
 )
@@ -667,10 +882,8 @@ ${typstTableRow(['Total embodied carbon', formatCarbonReportCarbon(carbon.totalC
 
 == Element breakdown (compact)
 
-#table(
+#data-table(
   columns: (1.6fr, auto, auto, auto),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (left, right, right, right),
   table.header(
     [*Element*], [*Mass*], [*Carbon*], [*Share*],
@@ -681,10 +894,8 @@ ${breakdownRows})
 
 == Carbon factors
 
-#table(
+#data-table(
   columns: (1.6fr, auto),
-  stroke: 0.5pt + ridge-dark,
-  inset: 8pt,
   align: (left, right),
   table.header(
     [*Material*], [*Factor (kgCO2e/kg)*],
@@ -696,12 +907,20 @@ ${typstTableRow(['Hot-rolled steel sections', formatNumber(factors.steelSection,
 
 == Methodology
 
-- Hot-rolled steel sections include columns, gable columns, rafters, haunches, eaves ties, bracing, and a 10% allowance for connections.
-- Side rails and purlins use the galvanized steel factor (${formatNumber(factors.galvanizedSteel, 3)} kgCO2e/kg), which is higher than hot-rolled sections (${formatNumber(factors.steelSection, 3)} kgCO2e/kg).
-- Foundation concrete volume is taken from the sized footing or pile geometry; pad reinforcement is included where the model sizes a bottom mat.
-- The ground floor slab is modelled as 250 mm concrete with H12 bars top and bottom each way at 200 mm centres.
-- Carbon intensity is reported over gross internal floor area (span × building length).
-- SCORS bands follow IStructE guidance in 50 kgCO2e/m² steps from a band-A ceiling of 150 kgCO2e/m².
-- Charts plot carbon in tonnes CO2e for readability; tables retain kg or tonnes depending on magnitude.
+#block(
+  width: 100%,
+  stroke: 0.5pt + ridge-border,
+  fill: ridge-surface,
+  radius: 8pt,
+  inset: 12pt,
+)[
+  - Hot-rolled steel sections include columns, gable columns, rafters, haunches, eaves ties, bracing, and a 10% allowance for connections.
+  - Side rails and purlins use the galvanized steel factor (${formatNumber(factors.galvanizedSteel, 3)} kgCO2e/kg), which is higher than hot-rolled sections (${formatNumber(factors.steelSection, 3)} kgCO2e/kg).
+  - Foundation concrete volume is taken from the sized footing or pile geometry; pad reinforcement is included where the model sizes a bottom mat.
+  - The ground floor slab is modelled as 250 mm concrete with H12 bars top and bottom each way at 200 mm centres.
+  - Carbon intensity is reported over gross internal floor area (span × building length).
+  - SCORS bands follow IStructE guidance in 50 kgCO2e/m² steps from a band-A ceiling of 150 kgCO2e/m².
+  - Charts plot carbon in tonnes CO2e for readability; tables retain kg or tonnes depending on magnitude.
+]
 `;
 }

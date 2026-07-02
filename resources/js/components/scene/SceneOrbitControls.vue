@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { extend, useLoop, useTresContext } from '@tresjs/core';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { computed, onUnmounted, shallowRef, watch } from 'vue';
-
-extend({ OrbitControls });
+import { OrbitControls } from '@tresjs/cientos';
+import { useTresContext } from '@tresjs/core';
+import type { OrbitControls as OrbitControlsInstance } from 'three-stdlib';
+import {
+    computed,
+    shallowRef,
+    unref,
+    watch,
+} from 'vue';
 
 const props = withDefaults(
     defineProps<{
@@ -21,15 +25,27 @@ const props = withDefaults(
     },
 );
 
-const { camera, renderer, controls: tresControls } = useTresContext();
-const controlsRef = shallowRef<OrbitControls | null>(null);
-const controlTarget = shallowRef<[number, number, number]>([...props.target]);
-const initializedControls = new WeakSet<OrbitControls>();
+const { camera, renderer } = useTresContext();
+const orbitControlsRef = shallowRef<{
+    instance: OrbitControlsInstance | null;
+} | null>(null);
 
 const activeCamera = computed(() => camera.activeCamera.value);
-const domElement = computed(() => renderer.instance.domElement);
+const orbitTarget = shallowRef<[number, number, number]>([...props.target]);
+const initializedControls = new WeakSet<OrbitControlsInstance>();
 
-function applyInitialView(instance: OrbitControls): void {
+function resolveControlsInstance(): OrbitControlsInstance | null {
+    const exposed = orbitControlsRef.value?.instance;
+
+    return exposed ? unref(exposed) : null;
+}
+
+function syncOrbitLimits(instance: OrbitControlsInstance): void {
+    instance.minDistance = props.minDistance;
+    instance.maxDistance = props.maxDistance;
+}
+
+function applyInitialView(instance: OrbitControlsInstance): void {
     if (initializedControls.has(instance) || !activeCamera.value) {
         return;
     }
@@ -40,69 +56,61 @@ function applyInitialView(instance: OrbitControls): void {
         activeCamera.value.position.set(...props.initialPosition);
     }
 
-    controlTarget.value = [...props.target];
+    orbitTarget.value = [...props.target];
     instance.target.set(...props.target);
-    instance.minDistance = props.minDistance;
-    instance.maxDistance = props.maxDistance;
+    syncOrbitLimits(instance);
     instance.update();
     initializedControls.add(instance);
 }
 
-watch(controlsRef, (instance) => {
-    tresControls.value = instance;
+watch(
+    () => orbitControlsRef.value?.instance,
+    (instance) => {
+        if (!instance) {
+            return;
+        }
 
-    if (!instance) {
-        return;
-    }
-
-    applyInitialView(instance);
-
-    instance.addEventListener('change', () => {
-        renderer.invalidate();
-    });
-});
+        applyInitialView(unref(instance));
+    },
+    { immediate: true },
+);
 
 watch(activeCamera, () => {
-    if (controlsRef.value) {
-        applyInitialView(controlsRef.value);
+    const instance = resolveControlsInstance();
+
+    if (instance) {
+        applyInitialView(instance);
     }
 });
 
 watch(
-    () => [props.minDistance, props.maxDistance, props.up] as const,
-    ([minDistance, maxDistance, up]) => {
-        if (!controlsRef.value || !activeCamera.value) {
+    () => [props.minDistance, props.maxDistance] as const,
+    () => {
+        const instance = resolveControlsInstance();
+
+        if (!instance) {
             return;
         }
 
-        activeCamera.value.up.set(...up);
-        controlsRef.value.minDistance = minDistance;
-        controlsRef.value.maxDistance = maxDistance;
+        syncOrbitLimits(instance);
     },
 );
 
-const { onBeforeRender } = useLoop();
-
-onBeforeRender(() => {
-    controlsRef.value?.update();
-});
-
-onUnmounted(() => {
-    tresControls.value = null;
-});
+function handleControlsChange(): void {
+    renderer.invalidate();
+}
 </script>
 
 <template>
-    <TresOrbitControls
-        v-if="activeCamera && domElement"
-        :key="activeCamera.uuid"
-        ref="controlsRef"
-        :args="[activeCamera, domElement]"
-        :target="controlTarget"
+    <OrbitControls
+        ref="orbitControlsRef"
+        make-default
+        :target="orbitTarget"
+        :min-distance="props.minDistance"
+        :max-distance="props.maxDistance"
         :enable-damping="true"
         :damping-factor="0.05"
         :enable-rotate="true"
-        :min-distance="minDistance"
-        :max-distance="maxDistance"
+        @change="handleControlsChange"
     />
 </template>

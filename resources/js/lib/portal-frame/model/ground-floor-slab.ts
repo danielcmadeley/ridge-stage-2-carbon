@@ -1,7 +1,7 @@
 import { BoxGeometry, Mesh } from 'three';
 import {
     configurePortalFrameMeshShadows,
-    createConcreteMaterial,
+    createSlabMaterial,
 } from '@/lib/portal-frame/rendering/portal-frame-materials';
 import type { PortalFrameDesign } from '@/types/portal-frame';
 
@@ -30,10 +30,7 @@ export function groundFloorSlab(design: PortalFrameDesign): GroundFloorSlab {
 export function createGroundFloorSlabMesh(design: PortalFrameDesign): Mesh {
     const slab = groundFloorSlab(design);
     const geometry = new BoxGeometry(slab.widthM, slab.lengthM, slab.depthM);
-    const material = createConcreteMaterial({
-        transparent: true,
-        opacity: 0.92,
-    });
+    const material = createSlabMaterial();
     const mesh = new Mesh(geometry, material);
 
     mesh.name = slab.id;

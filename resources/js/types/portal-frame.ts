@@ -160,9 +160,10 @@ export type ResolvedPortalFrameSections = {
 
 export const PORTAL_FRAME_TABULATED_SPANS = [15, 20, 25, 30, 35, 40] as const;
 
-export const PORTAL_FRAME_STEEL_COLOR = '#b8472b';
-export const PORTAL_FRAME_SECONDARY_STEEL_COLOR = '#b5bec7';
-export const PORTAL_FRAME_FOUNDATION_COLOR = '#9c968e';
+export const PORTAL_FRAME_STEEL_COLOR = '#943c32';
+export const PORTAL_FRAME_SECONDARY_STEEL_COLOR = '#aec8e8';
+export const PORTAL_FRAME_SLAB_COLOR = '#c8c2b9';
+export const PORTAL_FRAME_FOUNDATION_COLOR = '#868079';
 
 export const defaultFoundationAssumptions = (): FoundationAssumptions => ({
     allowableBearingKpa: 150,

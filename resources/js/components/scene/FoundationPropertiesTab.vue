@@ -184,6 +184,12 @@ const visibleAssumptionFields = computed(() =>
     ),
 );
 
+const sizingResultLabel = computed(
+    () =>
+        props.foundationSizingEntries[0]?.result.label ??
+        foundationTypeLabels[props.foundation.type],
+);
+
 function updateFoundationType(event: Event): void {
     emit(
         'updateType',
@@ -209,6 +215,27 @@ function foundationResultStatus(result: FoundationSizingResult): string {
 function maximumUtilisation(result: FoundationSizingResult): number {
     return Math.max(...result.checks.map((check) => check.utilisation));
 }
+
+function governingCheck(result: FoundationSizingResult) {
+    const checks = result.checks.filter(
+        (check) => !check.label.includes('passive-discounted'),
+    );
+
+    return checks.reduce((best, check) =>
+        check.utilisation > best.utilisation ? check : best,
+    );
+}
+
+function governingCheckLabel(result: FoundationSizingResult): string {
+    const check = governingCheck(result);
+
+    return `${check.label} (${check.utilisation.toFixed(2)})`;
+}
+
+const padLikeFoundationTypes = new Set<FoundationType>([
+    'reinforced_pad',
+    'mass_filled',
+]);
 </script>
 
 <template>
@@ -273,18 +300,24 @@ function maximumUtilisation(result: FoundationSizingResult): number {
             v-if="foundationSizing"
             class="rounded-md border border-sidebar-border/70 bg-muted/40 px-3 py-2 text-sm"
         >
-            <p class="font-medium">
-                {{ foundationTypeLabels[foundation.type] }}
-                sizing
-            </p>
+            <p class="font-medium">{{ sizingResultLabel }} sizing</p>
             <p class="mt-1 text-xs text-muted-foreground">
                 Preliminary sizing from base reactions. Confirm with project
                 geotechnical and code checks.
             </p>
+            <p
+                v-if="padLikeFoundationTypes.has(foundation.type)"
+                class="mt-2 text-xs text-muted-foreground"
+            >
+                Reinforced pad and mass-filled often share the same plan size
+                for moderate column loads because geotechnical checks govern
+                both. Mass-filled grows when the EC2 plain-footing projection
+                rule becomes governing under heavier loads.
+            </p>
             <div class="mt-3 grid gap-3">
                 <div
                     v-for="{ side, result } in foundationSizingEntries"
-                    :key="side"
+                    :key="`${side}-${result.type}`"
                     class="rounded-md border border-sidebar-border/70 bg-background/50 p-2"
                 >
                     <div class="flex items-center justify-between gap-2">
@@ -304,6 +337,9 @@ function maximumUtilisation(result: FoundationSizingResult): number {
                         {{ result.dimensions.widthM.toFixed(2) }}m ×
                         {{ result.dimensions.depthM.toFixed(2) }}m ×
                         {{ result.dimensions.heightM.toFixed(2) }}m
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Governing: {{ governingCheckLabel(result) }}
                     </p>
                     <p v-if="result.reinforcement" class="mt-1">
                         Rebar: T{{

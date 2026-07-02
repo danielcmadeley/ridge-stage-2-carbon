@@ -53,6 +53,7 @@ export {
     type FoundationDimensions,
     type FoundationSizingResult,
 } from '@/lib/portal-frame/foundation/foundation-sizing';
+export { foundationWindLoadKn } from '@/lib/portal-frame/foundation/foundation-wind-load';
 export {
     createForceDiagramGroup,
     type AnalyticalForceMode,

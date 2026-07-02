@@ -45,4 +45,35 @@ describe('usePortalFrameResults', () => {
             initialCarbon ?? Number.POSITIVE_INFINITY,
         );
     });
+
+    it('recomputes foundation sizing when the foundation type changes', () => {
+        const design = reactive(defaultPortalFrameDesign());
+        const results = usePortalFrameResults(() => design);
+        const padDimensions = {
+            ...results.foundationSizing.value!.left.dimensions,
+        };
+
+        design.foundation.type = 'mass_filled';
+
+        expect(results.foundationSizing.value?.left.type).toBe('mass_filled');
+        expect(
+            results.foundationSizing.value?.left.checks.some((check) =>
+                check.label.includes('Plain footing projection'),
+            ),
+        ).toBe(true);
+        expect(results.foundationSizing.value?.left.dimensions).toEqual(
+            padDimensions,
+        );
+        expect(results.carbon.value?.breakdown.rebar.massKg).toBe(0);
+
+        design.foundation.type = 'two_pile_cap';
+
+        expect(results.foundationSizing.value?.left.type).toBe('two_pile_cap');
+        expect(results.foundationSizing.value?.left.dimensions).not.toEqual(
+            padDimensions,
+        );
+        expect(results.carbon.value?.breakdown.rebar.massKg).toBeGreaterThan(
+            0,
+        );
+    });
 });

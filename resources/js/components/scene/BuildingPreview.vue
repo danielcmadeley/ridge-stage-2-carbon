@@ -19,11 +19,11 @@ const forceHover = ref<ForceDiagramHoverInfo | null>(null);
 </script>
 
 <template>
-    <div class="relative h-svh min-h-0 w-full overflow-hidden bg-[#9fb8d3]">
+    <div class="relative h-svh min-h-0 w-full overflow-hidden bg-[#b8d4ea]">
         <TresCanvas
-            clear-color="#9fb8d3"
+            clear-color="#b8d4ea"
             :alpha="false"
-            :tone-mapping-exposure="0.75"
+            :tone-mapping-exposure="1.3"
             render-mode="always"
             class="absolute inset-0 h-full w-full"
         >

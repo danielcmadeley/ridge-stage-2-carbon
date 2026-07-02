@@ -1,4 +1,5 @@
 import type { SupportReaction } from '@/lib/portal-frame/analysis/frame-analysis';
+import { foundationWindLoadKn } from '@/lib/portal-frame/foundation/foundation-wind-load';
 import {
     evaluate as evaluateMass,
     Inputs as MassInputs,
@@ -127,15 +128,15 @@ function buildPadInputs(
     reaction: SupportReaction,
     design: FoundationDesign,
     column: UbSectionDimensions | undefined,
+    windKn: number,
 ): PadInputs {
     const a = design.assumptions;
     const { colXmm, colYmm } = columnPlanMm(column);
     const verticalKn = Math.max(reaction.fzKn, 0);
-    const horizontalKn = Math.abs(reaction.fxKn);
 
     return new PadInputs({
         F_Gz_k: verticalKn, // treated as permanent by the sizer
-        F_Wx_k: horizontalKn, // treated as variable wind by the sizer
+        F_Wx_k: windKn, // characteristic wind (variable action), not frame fx
         gammaSoil: a.soilCoverDensityKnM3,
         c_k: 0,
         phi_k: a.effectiveFrictionAngleDeg,
@@ -259,8 +260,9 @@ function sizeReinforcedPad(
     reaction: SupportReaction,
     design: FoundationDesign,
     column: UbSectionDimensions | undefined,
+    windKn: number,
 ): FoundationSizingResult {
-    const inputs = buildPadInputs(reaction, design, column);
+    const inputs = buildPadInputs(reaction, design, column, windKn);
 
     try {
         return padResultToSizing(inputs, sizePadFast(inputs));
@@ -280,15 +282,15 @@ function buildMassInputs(
     reaction: SupportReaction,
     design: FoundationDesign,
     column: UbSectionDimensions | undefined,
+    windKn: number,
 ): MassInputs {
     const a = design.assumptions;
     const { colXmm, colYmm } = columnPlanMm(column);
     const verticalKn = Math.max(reaction.fzKn, 0);
-    const horizontalKn = Math.abs(reaction.fxKn);
 
     return new MassInputs({
         F_Gz_k: verticalKn,
-        F_Wx_k: horizontalKn,
+        F_Wx_k: windKn,
         gammaSoil: a.soilCoverDensityKnM3,
         c_k: 0,
         phi_k: a.effectiveFrictionAngleDeg,
@@ -394,8 +396,9 @@ function sizeMassFilled(
     reaction: SupportReaction,
     design: FoundationDesign,
     column: UbSectionDimensions | undefined,
+    windKn: number,
 ): FoundationSizingResult {
-    const inputs = buildMassInputs(reaction, design, column);
+    const inputs = buildMassInputs(reaction, design, column, windKn);
 
     try {
         return massResultToSizing(design.assumptions, sizeMassFast(inputs));
@@ -416,10 +419,11 @@ function buildPileCapInputs(
     deadLoadKnM2: number,
     servicesLoadKnM2: number,
     liveLoadKnM2: number,
+    windKn: number,
 ): PileCapInputs {
     const { colXmm, colYmm } = columnPlanMm(column);
 
-    // Split the combined reaction into permanent/variable parts using the
+    // Split the vertical reaction into permanent/variable parts using the
     // design permanent/live ratio. Services are permanent (factored by γ_G
     // = 1.35 alongside the dead load) so they fold into the permanent side
     // of the split; the sizer then applies γ_G/γ_Q internally.
@@ -431,14 +435,13 @@ function buildPileCapInputs(
     const variableFraction = 1 - permanentFraction;
 
     const verticalKn = Math.max(reaction.fzKn, 0);
-    const horizontalKn = Math.abs(reaction.fxKn);
     const momentKnm = Math.abs(reaction.momentKnm);
 
     return new PileCapInputs({
         N_G: permanentFraction * verticalKn,
         N_Q: variableFraction * verticalKn,
-        Fvx_G: permanentFraction * horizontalKn,
-        Fvx_Q: variableFraction * horizontalKn,
+        Fvx_G: 0,
+        Fvx_Q: windKn,
         M_G: permanentFraction * momentKnm,
         M_Q: variableFraction * momentKnm,
         colEcc: 0,
@@ -548,6 +551,7 @@ function sizeTwoPileCap(
     deadLoadKnM2: number,
     servicesLoadKnM2: number,
     liveLoadKnM2: number,
+    windKn: number,
 ): FoundationSizingResult {
     const inputs = buildPileCapInputs(
         reaction,
@@ -556,6 +560,7 @@ function sizeTwoPileCap(
         deadLoadKnM2,
         servicesLoadKnM2,
         liveLoadKnM2,
+        windKn,
     );
 
     // Best effort: the min-carbon feasible depth, or the least-overstressed
@@ -572,6 +577,7 @@ export function sizeFoundation(
     columnSection?: UbSectionDimensions,
 ): FoundationSizingResult {
     const foundation = design.foundation;
+    const windKn = foundationWindLoadKn(design);
 
     if (foundation.type === 'two_pile_cap') {
         return sizeTwoPileCap(
@@ -581,14 +587,15 @@ export function sizeFoundation(
             design.deadLoadKnM2,
             design.servicesLoadKnM2,
             design.liveLoadKnM2,
+            windKn,
         );
     }
 
     if (foundation.type === 'mass_filled') {
-        return sizeMassFilled(reaction, foundation, columnSection);
+        return sizeMassFilled(reaction, foundation, columnSection, windKn);
     }
 
-    return sizeReinforcedPad(reaction, foundation, columnSection);
+    return sizeReinforcedPad(reaction, foundation, columnSection, windKn);
 }
 
 export function sizeFoundationReactions(

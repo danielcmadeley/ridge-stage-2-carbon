@@ -112,7 +112,7 @@ const sunPosition = computed(
 
 const fogArgs = computed(
     () =>
-        ['#b9c7d6', metrics.value.size * 1.5, metrics.value.size * 8] as [
+        ['#d4e2ef', metrics.value.size * 2, metrics.value.size * 10] as [
             string,
             number,
             number,
@@ -136,24 +136,24 @@ onUnmounted(() => {
 
     <TresFog :args="fogArgs" />
     <ZUpSky
-        :turbidity="8"
-        :rayleigh="2"
-        :mie-coefficient="0.005"
-        :mie-directional-g="0.8"
-        :elevation="20"
+        :turbidity="4"
+        :rayleigh="1.5"
+        :mie-coefficient="0.003"
+        :mie-directional-g="0.7"
+        :elevation="28"
         :azimuth="215"
         :distance="3000"
     />
 
-    <TresAmbientLight :intensity="0.35" />
+    <TresAmbientLight :intensity="0.7" />
     <TresHemisphereLight
-        :sky-color="'#bcd4e8'"
-        :ground-color="'#4a3f33'"
-        :intensity="0.45"
+        :sky-color="'#e8f2fa'"
+        :ground-color="'#b8aea6'"
+        :intensity="0.8"
     />
     <TresDirectionalLight
         :position="sunPosition"
-        :intensity="1.15"
+        :intensity="1.85"
     />
 
     <primitive
